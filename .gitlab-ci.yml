@@ -1,0 +1,32 @@
+stages:
+  - lint
+  - test
+  - build_docker
+
+before_script:
+  - apt-get update -y
+
+lint:
+  stage: lint
+  script:
+  - pip3 install pipenv
+  - pipenv run pip install flake8
+  # stop the build if there are Python syntax errors or undefined names
+  - pipenv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+  # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+  - pipenv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+test:
+  stage: test
+  script:
+    - pip3 install pipenv
+    - pipenv install --skip-lock
+    - pipenv run python DistanceSyntaxique/manage.py test
+
+build:
+  stage: build_docker
+  script:
+  - curl -fsSL https://get.docker.com -o get-docker.sh
+  - sh get-docker.sh
+  - docker build -t distancesyntaxique:1.0 .
+

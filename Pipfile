@@ -1,0 +1,21 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+sphinx = "*"
+sphinx-rtd-theme = "*"
+pytest = "*"
+coverage = "*"
+
+[packages]
+numpy = "*"
+pandas = "*"
+statsmodels = "*"
+loguru = "*"
+scikit-learn = "*"
+
+
+[requires]
+python_version = "3.7"
