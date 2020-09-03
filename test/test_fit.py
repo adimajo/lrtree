@@ -66,18 +66,5 @@ def test_split():
 def test_not_fit():
     pass
 
-def test_not_fit():
-    n = 100
-    d = 2
-    x, y, theta = glmtree.Glmtree._generate_test_data(n, d)
-    model = glmtree.Glmtree()
-    model.check_is_fitted()
 
-def test_not_fit1():
-    n = 100
-    d = 2
-    x, y, theta = glmtree.Glmtree._generate_test_data(n, d)
-    model = glmtree.Glmtree()
-    model.fit(x, y)
-    model.check_is_fitted()
 

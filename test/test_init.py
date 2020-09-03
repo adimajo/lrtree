@@ -11,12 +11,9 @@ def test_init():
     assert glmtree_instance.ratios == (0.7,)
     assert glmtree_instance.class_num == 10
     assert glmtree_instance.max_iter == 100
-    assert glmtree_instance.X_train is None
-    assert glmtree_instance.X_validate is None
-    assert glmtree_instance.X_test is None
-    assert glmtree_instance.y_train is None
-    assert glmtree_instance.y_validate is None
-    assert glmtree_instance.y_test is None
+    assert glmtree_instance.train_rows is None
+    assert glmtree_instance.validate_rows is None
+    assert glmtree_instance.test_rows is None
     assert glmtree_instance.n == 0
 
 
