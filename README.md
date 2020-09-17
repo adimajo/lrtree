@@ -26,7 +26,7 @@ using the `coverage html` command which creates or updates the `htmlcov` folder 
 
 
 ## Utilization
-The package provides [sklearn](https://scikit-learn.org/stable) like interface
+The package provides [sklearn-like](https://scikit-learn.org/stable) interface.
 
 Loading [sample data](https://scikit-learn.org/stable/modules/generated/sklearn.datasets.load_boston.html) for regression task:
 
@@ -40,6 +40,7 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25)
 
 The trained model consists of a fitted `sklearn.tree.DecisionTreeClassifier` class for segmentation of a data and
 `sklearn.linear_model.LogisticRegression` regressions for each node a of a tree in a form of python list.
+
 The snippet to train the model and make a prediction:
 ```python
 from glmtree import *
@@ -53,5 +54,4 @@ model.fit(X_train, y_train)
 model.predict(X_test)
 ```
 
-## Complexity of Glmtree 
-* Complexity of Glmtree
+

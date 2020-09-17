@@ -28,13 +28,17 @@ def _dataset_split(self, X, y):
 
 def fit(self, X, y):
     """
-    # TODO desc
-    Fits the Glmtree object
-    :param self:
-    :param nparray X:
-    :param nparray y:
-    :return:
-    """
+        Fits the Glmtree object.
+        .. todo:: Refactor due to complexity
+        :param numpy.ndarray X:
+            Categorical features which levels are to be merged
+            (also in a numpy "string" array). Can be provided
+            only here.
+        :param numpy.ndarray y:
+            Boolean (0/1) labels of the observations. Must be of
+            the same length as X
+            (numpy "numeric" array).
+        """
 
 
     if len(y) != X.shape[0]:
@@ -80,18 +84,14 @@ def fit(self, X, y):
             train_data = df[idx]
             train_data = train_data.drop("c_map", axis=1)
             train_data = train_data.drop("c_hat", axis=1)
-            # maybe todo data cleaning here
 
             formula = "y~" + "+".join(map(str, train_data.columns[train_data.columns != "y"].to_list()))
             logreg = smf.glm(formula=formula, data=train_data, family=sm.families.Binomial()).fit()
 
-            #logreg = LogisticRegression().fit(train_data.loc[:, train_data.columns != "y"], train_data["y"])
-            #logregs_c_hat = np.append(logregs_c_hat, logreg)
-            #predictions_log[:, c_iter] = logreg.predict(df.loc[:, df.columns != "y"])
 
-            # TODO y'a-t-il une raison de faire ça plutôt que sklearn.linear_model.LogisticRegression ?
+            # Statsmodels was used because more simplicity of use of criterions
             logregs_c_hat = np.append(logregs_c_hat, logreg)
-            predictions_log[:, c_iter] = logreg.predict(df)  # TODO predict tweaked
+            predictions_log[:, c_iter] = logreg.predict(df)
 
         predictions_log[np.isnan(predictions_log)] = 0
 
@@ -104,7 +104,6 @@ def fit(self, X, y):
             train_data = df[idx]
             train_data = train_data.drop("c_map", axis=1)
             train_data = train_data.drop("c_hat", axis=1)
-            # maybe todo data cleaning here
 
             formula = "y~" + "+".join(map(str, train_data.columns[train_data.columns != "y"].to_list()))
             logreg = smf.glm(formula=formula, data=train_data, family=sm.families.Binomial()).fit()
@@ -142,7 +141,6 @@ def fit(self, X, y):
 
                 criterion_iter[i] = np.concatenate((criterion_iter[i], a))
             else:
-                # todo look out on this part of the code, y_val[idx] is an overkill
                 y_validate = df[df.index.isin(self.validate_rows)][idx]["y"]
                 X_validate = df[df.index.isin(self.validate_rows)][idx][df.columns.difference(["y", "c_map", "c_hat"])]
 
@@ -183,9 +181,8 @@ def fit(self, X, y):
         # TODO refactor
         for i in range(len(df["c_hat"])):
             df["c_hat"][i] = np.random.choice(df["c_hat"].unique(), 1, p=p[i])
-    # TODO refactor it to return resulting class or something
+
     self.best_link = best_link
     self.best_logreg = best_logreg
     self.criterion_iter = criterion_iter
     self.current_best = current_best
-    #return ((best_link, best_logreg), (criterion_iter[current_best], criterion_iter))
