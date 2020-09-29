@@ -1,3 +1,15 @@
+"""This module is dedicated to logistic regression trees
+
+.. autosummary::
+    :toctree:
+
+    Glmtree
+    Glmtree.check_is_fitted
+    Glmtree.fit
+    Glmtree._dataset_split
+    Glmtree._generate_test_data
+    NotFittedError
+"""
 from loguru import logger
 import sklearn as sk
 
@@ -13,61 +25,57 @@ class NotFittedError(sk.exceptions.NotFittedError):
 class Glmtree:
     """
     The class implements a supervised method based in logistic trees
-    """
 
+    .. attribute:: test
+        Boolean (T/F) specifying if a test set is required.
+        If True, the provided data is split to provide 20%
+        of observations in a test set and the reported
+        performance is the Gini index on test set.
+       :type: bool
+    .. attribute:: validation
+        Boolean (T/F) specifying if a validation set is
+        required. If True, the provided data is split to
+        provide 20% of observations in a validation set
+        and the reported performance is the Gini index on
+        the validation set (if no test=False). The quality
+        of the discretization at each step is evaluated
+        using the Gini index on the validation set, so
+        criterion must be set to "gini".
+        :type: bool
+    .. attribute:: criterion
+        The criterion to be used to assess the
+        goodness-of-fit of the discretization: "bic" or
+        "aic" if no validation set, else "gini".
+        :type: str
+    .. attribute:: max_iter
+        Number of MCMC steps to perform. The more the
+        better, but it may be more intelligent to use
+        several MCMCs. Computation time can increase
+        dramatically.
+        :type: int
+    .. attribute:: num_class
+        Number of initial discretization intervals for all
+        variables. If :code:`num_class` is bigger than the number of
+        factor levels for a given variable in
+        X, num_class is set (for this variable
+        only) to this variable's number of factor levels.
+        :type: int
+    .. attribute:: criterion_iter
+        The value of the criterion wished to be optimized
+        over the iterations.
+        :type: list
+    .. attribute:: best_link
+        The best link function between the original
+        features and their quantized counterparts that
+        allows to quantize the data after learning.
+        :type: list
+    .. attribute:: best_reglog:
+        The best logistic regression on quantized data found with best_link.
+        :type: statsmodels.formula.api.glm
+    .. attribute:: ratios
+        The line rows corresponding to the splits.
+        :type: tuple
     """
-        This class implements a supervised multivariate discretization method,
-        factor levels grouping and interaction discovery for logistic regression.
-        .. attribute:: test
-            Boolean (T/F) specifying if a test set is required.
-            If True, the provided data is split to provide 20%
-            of observations in a test set and the reported
-            performance is the Gini index on test set.
-           :type: bool
-        .. attribute:: validation
-            Boolean (T/F) specifying if a validation set is
-            required. If True, the provided data is split to
-            provide 20% of observations in a validation set
-            and the reported performance is the Gini index on
-            the validation set (if no test=False). The quality
-            of the discretization at each step is evaluated
-            using the Gini index on the validation set, so
-            criterion must be set to "gini".
-            :type: bool
-        .. attribute:: criterion
-            The criterion to be used to assess the
-            goodness-of-fit of the discretization: "bic" or
-            "aic" if no validation set, else "gini".
-            :type: str
-        .. attribute:: max_iter
-            Number of MCMC steps to perform. The more the
-            better, but it may be more intelligent to use
-            several MCMCs. Computation time can increase
-            dramatically.
-            :type: int
-        .. attribute:: num_class
-            Number of initial discretization intervals for all
-            variables. If :code:`num_class` is bigger than the number of
-            factor levels for a given variable in
-            X, num_class is set (for this variable
-            only) to this variable's number of factor levels.
-            :type: int
-        .. attribute:: criterion_iter
-            The value of the criterion wished to be optimized
-            over the iterations.
-            :type: list
-        .. attribute:: best_link
-            The best link function between the original
-            features and their quantized counterparts that
-            allows to quantize the data after learning.
-            :type: list
-        .. attribute:: best_reglog:
-            The best logistic regression on quantized data found with best_link.
-            :type: statsmodels.formula.api.glm
-        .. attribute:: ratios
-            The line rows corresponding to the splits.
-            :type: tuple
-        """
 
     def __init__(self, test: bool = False,
                  validation: bool = False,
@@ -76,34 +84,35 @@ class Glmtree:
                  class_num: int = 10,
                  max_iter: int = 100):
         """
-                Initializes self by checking if its arguments are appropriately specified.
-                    :param bool test:   Boolean specifying if a test set is required.
-                                        If True, the provided data is split to provide 20%
-                                        of observations in a test set and the reported
-                                        performance is the Gini index on test set.
-                :param bool validation: Boolean (T/F) specifying if a validation set is
-                                        required. If True, the provided data is split to
-                                        provide 20% of observations in a validation set
-                                        and the reported performance is the Gini index on
-                                        the validation set (if no test=False). The quality
-                                        of the discretization at each step is evaluated
-                                        using the Gini index on the validation set, so
-                                        criterion must be set to "gini".
-                :param str criterion:   The criterion to be used to assess the
-                                        goodness-of-fit of the discretization: "bic" or
-                                        "aic" if no validation set, else "gini".
-                :param int max_iter:    Number of MCMC steps to perform. The more the
-                                        better, but it may be more intelligent to use
-                                        several MCMCs. Computation time can increase
-                                        dramatically. Defaults to 100.
-                :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
-                                        Sum of values should be less than 1. Defaults to (0.7, 0.3)
-                :param int class_num:   Number of initial separation classes for all
-                                        variables. If :code:`class_num` is bigger than the number of
-                                        factor levels for a given variable in
-                                        :code:`X`, :code:`class_num` is set (for this variable
-                                        only) to this variable's number of factor levels. Defaults to 10.
-                """
+        Initializes self by checking if its arguments are appropriately specified.
+
+            :param bool test:       Boolean specifying if a test set is required.
+                                    If True, the provided data is split to provide 20%
+                                    of observations in a test set and the reported
+                                    performance is the Gini index on test set.
+            :param bool validation: Boolean (T/F) specifying if a validation set is
+                                    required. If True, the provided data is split to
+                                    provide 20% of observations in a validation set
+                                    and the reported performance is the Gini index on
+                                    the validation set (if no test=False). The quality
+                                    of the discretization at each step is evaluated
+                                    using the Gini index on the validation set, so
+                                    criterion must be set to "gini".
+            :param str criterion:   The criterion to be used to assess the
+                                    goodness-of-fit of the discretization: "bic" or
+                                    "aic" if no validation set, else "gini".
+            :param int max_iter:    Number of MCMC steps to perform. The more the
+                                    better, but it may be more intelligent to use
+                                    several MCMCs. Computation time can increase
+                                    dramatically. Defaults to 100.
+            :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
+                                    Sum of values should be less than 1. Defaults to (0.7, 0.3)
+            :param int class_num:   Number of initial separation classes for all
+                                    variables. If :code:`class_num` is bigger than the number of
+                                    factor levels for a given variable in
+                                    :code:`X`, :code:`class_num` is set (for this variable
+                                    only) to this variable's number of factor levels. Defaults to 10.
+        """
         # Test is bool
         if not type(test) is bool:
             raise ValueError("Test must be boolean")

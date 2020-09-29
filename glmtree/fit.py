@@ -1,3 +1,6 @@
+"""
+fit method for the Glmtree class
+"""
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -5,11 +8,19 @@ import statsmodels.formula.api as smf
 from sklearn.tree import DecisionTreeClassifier
 
 
-def ctree():
-    pass
-
-
 def _dataset_split(self, X, y):
+    """
+    Splits the provided dataset into training, validation and test sets
+
+    :param numpy.ndarray X:
+        array_like of shape (n_samples, n_features)
+        Vector to be scored, where `n_samples` is the number of samples and
+        `n_features` is the number of features
+    :param numpy.ndarray y:
+        Boolean (0/1) labels of the observations. Must be of
+        the same length as X
+        (numpy "numeric" array).
+    """
     fst_idx = int(self.ratios[0] * self.n)
     if self.validation and self.test:
         snd_idx = int((self.ratios[0] + self.ratios[1]) * self.n)
@@ -26,11 +37,13 @@ def _dataset_split(self, X, y):
 def fit(self, X, y):
     """
         Fits the Glmtree object.
+
         .. todo:: Refactor due to complexity
+
         :param numpy.ndarray X:
-            Categorical features which levels are to be merged
-            (also in a numpy "string" array). Can be provided
-            only here.
+            array_like of shape (n_samples, n_features)
+            Vector to be scored, where `n_samples` is the number of samples and
+            `n_features` is the number of features
         :param numpy.ndarray y:
             Boolean (0/1) labels of the observations. Must be of
             the same length as X

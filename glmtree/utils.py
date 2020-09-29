@@ -1,3 +1,6 @@
+"""
+utils module for the Glmtree class: generating some data.
+"""
 # TODO Add more options for different test/validation pairs
 
 import random
