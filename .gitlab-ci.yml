@@ -1,7 +1,6 @@
 stages:
   - lint
   - test
- # - build_docker
 
 before_script:
   - apt-get update -y
@@ -22,12 +21,3 @@ test:
     - pip3 install pipenv
     - pipenv install -d --skip-lock
     - pipenv run coverage run -m pytest
-
-
-
-build:
-  stage: build_docker
-  script:
-  - curl -fsSL https://get.docker.com -o get-docker.sh
-  - sh get-docker.sh
-
