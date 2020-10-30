@@ -23,6 +23,59 @@ class NotFittedError(sk.exceptions.NotFittedError):
     """
 
 
+def _check_input_args(validation, test, ratios, criterion):
+    # Test is bool
+    if not type(test) is bool:
+        msg = "Test must be boolean"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    # Validation is bool
+    if not type(validation) is bool:
+        msg = "Validation must be boolean"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    # Ratios are not correctly defined
+    if not type(ratios) is tuple:
+        msg = "Ratios must be tuple"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    if any(i <= 0 for i in ratios):
+        msg = "Dataset split ratios should be positive"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    if sum(ratios) >= 1:
+        msg = "Dataset split ratios should be positive numbers with the sum less when 1"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    if validation and test:
+        if len(ratios) != 2:
+            msg = ("With validation and test, dataset split ratios should be 2 "
+                   "positive numbers with the sum less when 1")
+            logger.error(msg)
+            raise ValueError(msg)
+    elif validation or test:
+        if len(ratios) != 1:
+            msg = ("With either validation or test, dataset split ratios should contain 1 "
+                   "argument strictly between 0 and 1")
+            logger.error(msg)
+            raise ValueError(msg)
+    elif ratios != (0.7,):
+        msg = ("You provided dataset split ratios, but since test "
+               "and validation are False, they will not be used")
+        logger.warning(msg)
+
+    # The criterion should be one of three from the list
+    if criterion not in ("gini", "bic", "aic"):
+        msg = "Criterion " + criterion + " is not supported"
+        logger.error(msg)
+        raise ValueError(msg)
+
+
 class Glmtree:
     """
     The class implements a supervised method based in logistic trees
@@ -115,56 +168,7 @@ class Glmtree:
                                     :code:`X`, :code:`class_num` is set (for this variable
                                     only) to this variable's number of factor levels. Defaults to 10.
         """
-        # Test is bool
-        if not type(test) is bool:
-            msg = "Test must be boolean"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        # Validation is bool
-        if not type(validation) is bool:
-            msg = "Validation must be boolean"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        # Ratios are not correctly defined
-        if not type(ratios) is tuple:
-            msg = "Ratios must be tuple"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if any(i <= 0 for i in ratios):
-            msg = "Dataset split ratios should be positive"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if sum(ratios) >= 1:
-            msg = "Dataset split ratios should be positive numbers with the sum less when 1"
-            logger.error(msg)
-            raise ValueError(msg)
-
-        if validation and test:
-            if len(ratios) != 2:
-                msg = ("With validation and test, dataset split ratios should be 2 "
-                       "positive numbers with the sum less when 1")
-                logger.error(msg)
-                raise ValueError(msg)
-        elif validation or test:
-            if len(ratios) != 1:
-                msg = ("With either validation or test, dataset split ratios should contain 1 "
-                       "argument strictly between 0 and 1")
-                logger.error(msg)
-                raise ValueError(msg)
-        elif ratios != (0.7,):
-            msg = ("You provided dataset split ratios, but since test " 
-                   "and validation are False, they will not be used")
-            logger.warning(msg)
-
-        # The criterion should be one of three from the list
-        if criterion not in ("gini", "bic", "aic"):
-            msg = "Criterion " + criterion + " is not supported"
-            logger.error(msg)
-            raise ValueError(msg)
+        _check_input_args(validation, test, ratios, criterion)
 
         if not validation and criterion == "gini":
             msg = "Using Gini index on training set might yield an overfitted model."
