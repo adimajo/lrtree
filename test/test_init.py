@@ -86,11 +86,11 @@ def test_validation_criterion(caplog):
 
     assert caplog.records[0].message == ("No need to penalize the log-likelihood when a validation set is used. Using "
                                          "log-likelihood "
-                                         "instead of AIC/BIC. ")
+                                         "instead of AIC/BIC.")
 
     glmtree.Glmtree(validation=True,
                     criterion="bic")
 
     assert caplog.records[0].message == (
         "No need to penalize the log-likelihood when a validation set is used. Using log-likelihood "
-        "instead of AIC/BIC. ")
+        "instead of AIC/BIC.")

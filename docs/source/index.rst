@@ -8,10 +8,11 @@
    :caption: Contents:
 
 Welcome to :mod:`glmtree`'s documentation!
-===================================
+==========================================
 
 .. autosummary::
    :toctree: _autosummary
+   :recursive:
 
    glmtree
 

@@ -10,8 +10,13 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-import os
 import sys
+import os
+import codecs
+import re
+
+there = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'glmtree'))
+
 sys.path.insert(0, os.path.abspath('../../glmtree'))
 sys.path.insert(0, os.path.abspath('../..'))
 
@@ -22,8 +27,18 @@ project = 'glmtree'
 copyright = '2020, Adrien Ehrhardt, Dmitry Gaynullin'
 author = 'Adrien Ehrhardt, Dmitry Gaynullin'
 
+
 # The full version, including alpha/beta/rc tags
-release = '0.1'
+def find_version(*file_paths):
+    with codecs.open(os.path.join(there, *file_paths), 'r') as fp:
+        version_file = fp.read()
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", version_file, re.M)
+    if version_match:
+        return version_match.group(1)
+    raise RuntimeError("Unable to find version string.")
+
+
+release = find_version("__init__.py")
 
 
 # -- General configuration ---------------------------------------------------

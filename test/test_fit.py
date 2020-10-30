@@ -6,7 +6,7 @@ import glmtree
 def test_args_fit():
     n = 1000
     d = 4
-    X, y, _ = glmtree.Glmtree._generate_test_data(n, d)
+    X, y, _ = glmtree.Glmtree.generate_data(n, d)
 
     model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10, max_iter=1)
     model.fit(X, y)
@@ -52,14 +52,12 @@ def test_data_type():
 def test_split():
     n = 1000
     d = 4
-    X, y, _ = glmtree.Glmtree._generate_test_data(n, d)
+    X, y, _ = glmtree.Glmtree.generate_data(n, d)
 
     model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10, max_iter=1)
     model.fit(X, y)
 
 
 def test_not_fit():
-    pass
-
-
-
+    model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10, max_iter=1)
+    model.predict(X=None)

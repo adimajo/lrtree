@@ -4,12 +4,13 @@
     :toctree:
 
     Glmtree
-    Glmtree.check_is_fitted
     Glmtree.fit
-    Glmtree._dataset_split
-    Glmtree._generate_test_data
+    Glmtree.predict
+    Glmtree.check_is_fitted
+    Glmtree.generate_data
     NotFittedError
 """
+__version__ = "0.1.0"
 from loguru import logger
 import sklearn as sk
 
@@ -77,7 +78,8 @@ class Glmtree:
         :type: tuple
     """
 
-    def __init__(self, test: bool = False,
+    def __init__(self,
+                 test: bool = False,
                  validation: bool = False,
                  criterion: str = "bic",
                  ratios: tuple = (0.7,),
@@ -115,44 +117,63 @@ class Glmtree:
         """
         # Test is bool
         if not type(test) is bool:
-            raise ValueError("Test must be boolean")
+            msg = "Test must be boolean"
+            logger.error(msg)
+            raise ValueError(msg)
 
         # Validation is bool
         if not type(validation) is bool:
-            raise ValueError("Validation must be boolean")
+            msg = "Validation must be boolean"
+            logger.error(msg)
+            raise ValueError(msg)
 
         # Ratios are not correctly defined
         if not type(ratios) is tuple:
-            raise ValueError("Ratios must be tuple")
+            msg = "Ratios must be tuple"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if any(i <= 0 for i in ratios):
-            raise ValueError("Dataset split ratios should be positive")
+            msg = "Dataset split ratios should be positive"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if sum(ratios) >= 1:
-            raise ValueError("Dataset split ratios should be positive numbers with the sum less when 1")
+            msg = "Dataset split ratios should be positive numbers with the sum less when 1"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if validation and test:
             if len(ratios) != 2:
-                raise ValueError("Dataset split ratios should be 2 positive numbers with the sum less when 1")
+                msg = ("With validation and test, dataset split ratios should be 2 "
+                       "positive numbers with the sum less when 1")
+                logger.error(msg)
+                raise ValueError(msg)
         elif validation or test:
             if len(ratios) != 1:
-                raise ValueError("Dataset split ratios should contain 1 argument strictly between 0 and 1")
-        else:
-            message = "Dataset split ratios will not be used"
-            logger.warning(message)
+                msg = ("With either validation or test, dataset split ratios should contain 1 "
+                       "argument strictly between 0 and 1")
+                logger.error(msg)
+                raise ValueError(msg)
+        elif ratios != (0.7,):
+            msg = ("You provided dataset split ratios, but since test " 
+                   "and validation are False, they will not be used")
+            logger.warning(msg)
 
         # The criterion should be one of three from the list
         if criterion not in ("gini", "bic", "aic"):
-            raise ValueError("Criterion ", criterion, " is not supported")
+            msg = "Criterion " + criterion + " is not supported"
+            logger.error(msg)
+            raise ValueError(msg)
 
         if not validation and criterion == "gini":
-            message = "Using Gini index on training set might yield an overfitted model."
-            logger.warning(message)
+            msg = "Using Gini index on training set might yield an overfitted model."
+            logger.warning(msg)
 
         if validation and criterion in ("aic", "bic"):
-            message = "No need to penalize the log-likelihood when a validation set is used. Using log-likelihood " \
-                      "instead of AIC/BIC. "
-            logger.warning(message)
+            msg = "No need to penalize the log-likelihood when a validation set is used. Using log-likelihood " \
+                  "instead of AIC/BIC."
+            logger.warning(msg)
 
         self.test = test
         self.validation = validation
@@ -166,8 +187,9 @@ class Glmtree:
         self.n = 0
 
         # Results
-        self.best_link, self.best_logreg = [], None
-        self.criterion_iter, self.current_best = None, None
+        self.best_link = []
+        self.best_logreg = None
+        self.criterion_iter = []
 
     def check_is_fitted(self):
         """Perform is_fitted validation for estimator.
@@ -187,5 +209,6 @@ class Glmtree:
                                           "it means it did not find a better solution than the random initialization.")
 
     # Imported methods
-    from .fit import fit, _dataset_split
-    from .utils import _generate_test_data
+    from .fit import fit
+    from .predict import predict
+    from .utils import generate_data
