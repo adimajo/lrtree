@@ -23,21 +23,24 @@ class NotFittedError(sk.exceptions.NotFittedError):
     """
 
 
-def _check_input_args(validation, test, ratios, criterion):
+def _check_input_args(validation: bool, test: bool, ratios, criterion: str):
+    """
+    Checks input arguments :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`
+    """
     # Test is bool
-    if not type(test) is bool:
+    if type(test) is not bool:
         msg = "Test must be boolean"
         logger.error(msg)
         raise ValueError(msg)
 
     # Validation is bool
-    if not type(validation) is bool:
+    if type(validation) is not bool:
         msg = "Validation must be boolean"
         logger.error(msg)
         raise ValueError(msg)
 
     # Ratios are not correctly defined
-    if not type(ratios) is tuple:
+    if type(ratios) is not tuple:
         msg = "Ratios must be tuple"
         logger.error(msg)
         raise ValueError(msg)

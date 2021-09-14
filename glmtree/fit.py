@@ -79,8 +79,8 @@ def _calculate_criterion(self, df, logregs_c_map, c_iter, i, idx):
             y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
             X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
             self.criterion_iter[i] = self.criterion_iter[i] + np.sum(
-                np.log(df.loc[idx & df.index.isin(self.validate_rows), :]["y"] * logregs_c_map[c_iter].predict(X_validate)
-                       + (1 - y_validate) * (1 - y_validate * logregs_c_map[c_iter].predict(X_validate))))
+                np.log(df.loc[idx & df.index.isin(self.validate_rows), :]["y"] * logregs_c_map[c_iter].predict(
+                    X_validate) + (1 - y_validate) * (1 - y_validate * logregs_c_map[c_iter].predict(X_validate))))
     elif self.criterion == "bic":
         if not self.validation:
             X_train = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
