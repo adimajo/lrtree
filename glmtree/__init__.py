@@ -11,6 +11,8 @@
     NotFittedError
 """
 __version__ = "0.1.0"
+
+import numpy as np
 from loguru import logger
 import sklearn as sk
 
@@ -196,7 +198,9 @@ class Glmtree:
         # Results
         self.best_link = []
         self.best_logreg = None
+        self.best_criterion= -np.inf
         self.criterion_iter = []
+
 
     def check_is_fitted(self):
         """Perform is_fitted validation for estimator.
