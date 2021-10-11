@@ -31,7 +31,7 @@ for n in n_data :
 
     def fit_func(X, y, n_para):
         model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10, max_iter=100)
-        model.fit(X, y, n_para)
+        model.fit(X, y, n_para, tree_depth=2)
         return model
 
     models = Parallel(n_jobs=2)(delayed(fit_func)(X, y, 5) for k in range(10))

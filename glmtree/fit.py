@@ -123,7 +123,7 @@ def _vectorized_multinouilli(prob_matrix, items):
     return items[k]
 
 
-def fit(self, X, y, nb_init):
+def fit(self, X, y, nb_init, tree_depth):
     """
         Fits the Glmtree object.
 
@@ -192,7 +192,7 @@ def fit(self, X, y, nb_init):
             # TODO add different partition methods support
             # TODO add pass of control parameters
             if df["c_hat"].nunique() > 1:
-                clf = DecisionTreeClassifier(max_depth=4).fit(X, df["c_hat"])
+                clf = DecisionTreeClassifier(max_depth=tree_depth).fit(X, df["c_hat"])
                 link = clf
             else:
                 logger.info("The tree has only its root! Premature end of algorithm.")

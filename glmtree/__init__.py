@@ -223,3 +223,5 @@ class Glmtree:
     from .fit import fit
     from .predict import predict
     from .utils import generate_data
+    from .predict import predict_proba
+    from .predict import precision

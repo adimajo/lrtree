@@ -1,11 +1,13 @@
 import numpy as np
 import glmtree
-from glmtree.predict import score
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import RocCurveDisplay
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.feature_selection import SelectPercentile
 from sklearn.feature_selection import mutual_info_classif
+from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
 from sklearn import linear_model
 from sklearn import tree
@@ -147,10 +149,10 @@ X=selector.fit_transform(X)
 print(X.shape)
 
 #Selection de variables suivant leur dépendence
-X_select = SelectPercentile(mutual_info_classif, percentile=10).fit_transform(X, y)
-print(X_select.shape)
+# X_select = SelectPercentile(mutual_info_classif, percentile=100).fit_transform(X, y)
+# print(X_select.shape)
 
-X_train, X_test, y_train, y_test = train_test_split(X_select, y, random_state = 0)
+X_train, X_test, y_train, y_test = train_test_split(X, y, random_state = 0)
 
 #Normalisation
 scaler = StandardScaler()
@@ -161,10 +163,26 @@ X_test = scaler.transform(X_test)
 # modele_regLog.fit(X_train,y_train)
 # precision = modele_regLog.score(X_test,y_test)
 # print(precision)
+# y_pred=modele_regLog.predict(X_test)
+# y_proba=modele_regLog.predict_proba(X_test)
+# AUC=roc_auc_score(y_test, y_pred)
+# RocCurveDisplay.from_predictions(y_test, y_proba)
+# plt.show()
+
+# model_tree = DecisionTreeClassifier(random_state=0)
+# model_tree.fit(X_train, y_train)
+# y_pred=model_tree.predict(X_test)
+# y_proba=model_tree.predict_proba(X_test)
+# AUC=roc_auc_score(y_test, y_pred)
+# RocCurveDisplay.from_predictions(y_test, y_proba)
+# plt.show()
 
 model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10, max_iter=100)
-model.fit(X_train, y_train, nb_init=3)
-precision=score(model, X_test, y_test)
-print(precision)
-text_representation = tree.export_text(model.best_link)
-print(text_representation)
+model.fit(X_train, y_train, nb_init=3, tree_depth=4)
+y_pred = model.predict(X_test)
+y_proba=model.predict_proba(X_test)
+AUC = roc_auc_score(y_test, y_proba)
+RocCurveDisplay.from_predictions(y_test, y_proba)
+plt.show()
+# text_representation = tree.export_text(model.best_link)
+# print(text_representation)
