@@ -10,6 +10,7 @@ sphinx-rtd-theme = "*"
 pytest = "*"
 coverage = "*"
 numpydoc = "*"
+tikzplotlib = "*"
 
 [packages]
 numpy = "*"

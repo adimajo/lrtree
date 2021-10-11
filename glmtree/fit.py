@@ -174,8 +174,6 @@ def fit(self, X, y, nb_init):
             self.criterion_iter.append([0])
 
             for c_iter in range(df["c_map"].nunique()):
-                #Voir si y'avait vraiment séparation parfaite
-                #print(df[df["c_map"] == np.sort(df["c_map"].unique())[c_iter]])
                 idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter)
                 logregs_c_map = np.append(logregs_c_map, logreg)
                 model_c_map=np.append(model_c_map, model)
@@ -194,7 +192,7 @@ def fit(self, X, y, nb_init):
             # TODO add different partition methods support
             # TODO add pass of control parameters
             if df["c_hat"].nunique() > 1:
-                clf = DecisionTreeClassifier(max_depth=2).fit(X, df["c_hat"])
+                clf = DecisionTreeClassifier(max_depth=4).fit(X, df["c_hat"])
                 link = clf
             else:
                 logger.info("The tree has only its root! Premature end of algorithm.")

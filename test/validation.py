@@ -4,6 +4,8 @@ from joblib import Parallel, delayed
 from sklearn import tree
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
+
 
 bon_critere1=[]
 bon_critere2=[]
@@ -27,14 +29,8 @@ for n in n_data :
     split2_i = [[], [], []]
     X, y, theta, BIC_oracle = generate_data2(n, 3, theta=None)
 
-    models = []
-
-    # for k in range(20):
-    #     model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4, max_iter=100)
-    #     model.fit(X, y, nb_init=n)
-
     def fit_func(X, y, n_para):
-        model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4, max_iter=100)
+        model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10, max_iter=100)
         model.fit(X, y, n_para)
         return model
 
