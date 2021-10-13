@@ -18,7 +18,6 @@ def find_version(*file_paths):
 with open('requirements.txt') as fp:
     install_requires = [x.split("/")[-1] for x in fp.read().splitlines()[1:]]
 
-
 with open("README.md", "r") as fh:
     long_description = fh.read()
 

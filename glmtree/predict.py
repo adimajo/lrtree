@@ -1,5 +1,5 @@
 """
-predict method for the Glmtree class
+Predict, predict_proba and precision methods for the Glmtree class
 """
 import pandas as pd
 import numpy as np
@@ -28,17 +28,15 @@ def predict(self, X):
         bloc = X_df[X_df["class"] == liste_cla[i]].drop("class", axis=1)
         bloc_pred = logreg[i].predict(bloc.add_prefix("par_"))
         proba = proba.append(pd.DataFrame(bloc_pred), ignore_index=False)
-    proba=proba.sort_index()
+    proba = proba.sort_index()
     prediction = (proba[0] > 0.5).astype('int32').to_numpy()
-
-    #     y_predicted = [logreg[classes[i]].predict(pd.DataFrame(X_test[i]).transpose().add_prefix("par_"))) for i in range(len(X_test))]
 
     return prediction
 
 
 def predict_proba(self, X):
     """
-    Predicts the labels for new values using previously fitted glmtree object
+    Predicts the probability of the labels for new values using previously fitted glmtree object
 
     :param numpy.ndarray X:
         array_like of shape (n_samples, n_features)
@@ -59,8 +57,8 @@ def predict_proba(self, X):
         bloc = X_df[X_df["class"] == liste_cla[i]].drop("class", axis=1)
         bloc_pred = logreg[i].predict(bloc.add_prefix("par_"))
         proba = proba.append(pd.DataFrame(bloc_pred), ignore_index=False)
-    proba=proba.sort_index()
-    proba=proba[0].to_numpy()
+    proba = proba.sort_index()
+    proba = proba[0].to_numpy()
 
     return proba
 
@@ -75,13 +73,12 @@ def precision(self, X_test, y_test):
         Vector of the value, aimed to be predicted, in the data
     """
 
-    #X_train and y_train same size
+    # X_train and y_train same size
     if len(X_test) != len(y_test):
-        msg = "Les vecteurs doivent avoir la même taille"
+        msg = "X_test and y_test need to have the same size"
         raise ValueError(msg)
 
     prediction = self.predict(X_test)
-    diff= np.count_nonzero(prediction - y_test)
-    precision=1 - diff/len(X_test)
+    diff = np.count_nonzero(prediction - y_test)
+    precision = 1 - diff / len(X_test)
     return precision
-

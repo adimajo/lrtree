@@ -11,6 +11,7 @@ pytest = "*"
 coverage = "*"
 numpydoc = "*"
 tikzplotlib = "*"
+keras = "*"
 
 [packages]
 numpy = "*"
@@ -18,3 +19,4 @@ pandas = "*"
 statsmodels = "*"
 loguru = "*"
 scikit-learn = "*"
+keras = "*"

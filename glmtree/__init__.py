@@ -25,10 +25,16 @@ class NotFittedError(sk.exceptions.NotFittedError):
     """
 
 
-def _check_input_args(validation: bool, test: bool, ratios, criterion: str):
+def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion: str):
     """
-    Checks input arguments :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`
+    Checks input arguments :code: algo, :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`
     """
+    # The algorithm should be one the ones in the list
+    if algo not in ("SEM", "EM"):
+        msg = "Algorithm " + algo + " is not supported"
+        logger.error(msg)
+        raise ValueError(msg)
+
     # Test is bool
     if type(test) is not bool:
         msg = "Test must be boolean"
@@ -87,45 +93,34 @@ class Glmtree:
 
     .. attribute:: test
         Boolean (T/F) specifying if a test set is required.
-        If True, the provided data is split to provide 20%
-        of observations in a test set and the reported
-        performance is the Gini index on test set.
-       :type: bool
+        If True, the provided data is split to provide 20% of observations in a test set
+        and the reported performance is the Gini index on test set.
+        :type: bool
     .. attribute:: validation
-        Boolean (T/F) specifying if a validation set is
-        required. If True, the provided data is split to
-        provide 20% of observations in a validation set
-        and the reported performance is the Gini index on
-        the validation set (if no test=False). The quality
-        of the discretization at each step is evaluated
-        using the Gini index on the validation set, so
-        criterion must be set to "gini".
+        Boolean (T/F) specifying if a validation set is required.
+        If True, the provided data is split to provide 20% of observations in a validation set
+        and the reported performance is the Gini index on the validation set (if no test=False).
+        The quality of the discretization at each step is evaluated using the Gini index on the
+        validation set, so criterion must be set to "gini".
         :type: bool
     .. attribute:: criterion
-        The criterion to be used to assess the
-        goodness-of-fit of the discretization: "bic" or
-        "aic" if no validation set, else "gini".
+        The criterion to be used to assess the goodness-of-fit of the discretization: \
+        "bic" or "aic" if no validation set, else "gini".
         :type: str
     .. attribute:: max_iter
-        Number of MCMC steps to perform. The more the
-        better, but it may be more intelligent to use
-        several MCMCs. Computation time can increase
-        dramatically.
+        Number of MCMC steps to perform. The more the better, but it may be more intelligent to use
+        several MCMCs. Computation time can increase dramatically.
         :type: int
     .. attribute:: num_class
-        Number of initial discretization intervals for all
-        variables. If :code:`num_class` is bigger than the number of
-        factor levels for a given variable in
-        X, num_class is set (for this variable
-        only) to this variable's number of factor levels.
+        Number of initial discretization intervals for all variables. \
+        If :code:`num_class` is bigger than the number of factor levels for a given variable in
+        X, num_class is set (for this variable only) to this variable's number of factor levels.
         :type: int
     .. attribute:: criterion_iter
-        The value of the criterion wished to be optimized
-        over the iterations.
+        The value of the criterion wished to be optimized over the iterations.
         :type: list
     .. attribute:: best_link
-        The best link function between the original
-        features and their quantized counterparts that
+        The best link function between the original features and their quantized counterparts that
         allows to quantize the data after learning.
         :type: list
     .. attribute:: best_reglog:
@@ -137,6 +132,7 @@ class Glmtree:
     """
 
     def __init__(self,
+                 algo: str = 'SEM',
                  test: bool = False,
                  validation: bool = False,
                  criterion: str = "bic",
@@ -145,7 +141,8 @@ class Glmtree:
                  max_iter: int = 100):
         """
         Initializes self by checking if its arguments are appropriately specified.
-
+            :param str algo:        The algorithm to be used to fit the Glmtree: "SEM" for a stochastic approach or
+                                    "EM" for a non stochastic expectation/maximization algorithm.
             :param bool test:       Boolean specifying if a test set is required.
                                     If True, the provided data is split to provide 20%
                                     of observations in a test set and the reported
@@ -173,7 +170,7 @@ class Glmtree:
                                     :code:`X`, :code:`class_num` is set (for this variable
                                     only) to this variable's number of factor levels. Defaults to 10.
         """
-        _check_input_args(validation, test, ratios, criterion)
+        _check_input_args(algo, validation, test, ratios, criterion)
 
         if not validation and criterion == "gini":
             msg = "Using Gini index on training set might yield an overfitted model."
@@ -184,6 +181,7 @@ class Glmtree:
                   "instead of AIC/BIC."
             logger.warning(msg)
 
+        self.algo = algo
         self.test = test
         self.validation = validation
         self.criterion = criterion
@@ -198,9 +196,8 @@ class Glmtree:
         # Results
         self.best_link = []
         self.best_logreg = None
-        self.best_criterion= -np.inf
+        self.best_criterion = -np.inf
         self.criterion_iter = []
-
 
     def check_is_fitted(self):
         """Perform is_fitted validation for estimator.
@@ -222,6 +219,6 @@ class Glmtree:
     # Imported methods
     from .fit import fit
     from .predict import predict
-    from .utils import generate_data
+    from .data_test import generate_data
     from .predict import predict_proba
     from .predict import precision
