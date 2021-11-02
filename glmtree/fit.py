@@ -1,8 +1,11 @@
 """
 fit method for the Glmtree class
 """
+import glmtree
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
+from copy import deepcopy
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from loguru import logger
@@ -21,14 +24,20 @@ def _check_args(X, y):
         msg = "X {} and y {} must be of the same length".format(X.shape, len(y))
         logger.error(msg)
         raise ValueError(msg)
-
-    types_data = [i.dtype in ("int32", "float64") for i in X]
+    if 'numpy' in str(type(X)):
+        types_data = [i.dtype in ("int32", "float64") for i in X]
+    else:
+        types_data = [X[i].dtype in ("int32", "float64") for i in X.columns]
     if sum(types_data) != len(types_data):
         msg = "Unsupported data types. Columns of X must be int or float."
         logger.error(msg)
         raise ValueError(msg)
 
-    types_data = [i.dtype in ("int32", "float64") for i in y]
+    if 'numpy' in str(type(y)):
+        types_data = [i.dtype in ("int32", "float64") for i in y]
+    else:
+        types_data = [y.dtype in ("int32", "float64")]
+    # types_data = [i.dtype in ("int32", "float64") for i in y]
     if sum(types_data) != len(types_data):
         msg = "Unsupported data types. Columns of y must be int or float."
         logger.error(msg)
@@ -75,7 +84,7 @@ def _calculate_logreg_poids_c(df, proportion, c_iter):
     return model_results, model
 
 
-def _calculate_logreg_c(df, c, c_iter):
+def _calculate_logreg_c(df, c, c_iter, L1_wt=0, cnvrg_tol=1e-2, start_params=None):
     idx = df[c] == np.sort(df[c].unique())[c_iter]
     train_data = df[idx]
     train_data = train_data.drop("c_map", axis=1)
@@ -83,7 +92,7 @@ def _calculate_logreg_c(df, c, c_iter):
     formula = "y~" + "+".join(map(str, train_data.columns[train_data.columns != "y"].to_list()))
     try:
         model = smf.glm(formula=formula, data=train_data, family=sm.families.Binomial())
-        model_results = model.fit_regularized(alpha=0.0001, L1_wt=0)
+        model_results = model.fit_regularized(alpha=0.001, L1_wt=L1_wt, start_params=start_params, cnvrg_tol=cnvrg_tol)
     except PerfectSeparationError as e:
         msg = "Perfect separation in one of the leaves: cannot go further."
         logger.error(msg)
@@ -144,7 +153,8 @@ def _vectorized_multinouilli(prob_matrix, items):
     return items[k]
 
 
-def fit(self, X, y, nb_init=1, tree_depth=4):
+
+def fit(self, X, y, nb_init=1, tree_depth=10):
     """Fits the Glmtree object.
 
         :param numpy.ndarray X:
@@ -166,6 +176,8 @@ def fit(self, X, y, nb_init=1, tree_depth=4):
 
     _dataset_split(self)
 
+    params = ["Intercept"] + ["par_" + str(k) for k in range(X.shape[1])]
+
     if self.algo == 'SEM':
         for k in range(nb_init):
             # Classification init
@@ -186,12 +198,22 @@ def fit(self, X, y, nb_init=1, tree_depth=4):
                 predictions_log = np.zeros(shape=(self.n, df["c_hat"].nunique()))
 
                 # Getting p(y | x, c_hat) and filling the probs
-                for c_iter in range(df["c_hat"].nunique()):
-                    _, logreg, _ = _calculate_logreg_c(df, "c_hat", c_iter)
+                # penalty='l1', solver='liblinear'
+                models = [LogisticRegression(penalty='l2', C=0.001, tol=1e-2, warm_start=True) for k in
+                          range(df["c_hat"].nunique())]
 
-                    # Statsmodels was used because more simplicity of use of criterions
-                    logregs_c_hat = np.append(logregs_c_hat, logreg)
-                    predictions_log[:, c_iter] = logreg.predict(df)
+                for c_iter in range(df["c_hat"].nunique()):
+                    y = df['y']
+                    X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                    model = models[c_iter]
+                    logreg = model.fit(X, y)
+                    models[c_iter] = model
+
+                    logregs_c_hat = np.append(logregs_c_hat, deepcopy(logreg))
+                    to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
+                    to_predict = to_predict.to_numpy()
+                    predictions_log[:, c_iter] = logreg.predict(to_predict)
+
 
                 predictions_log[np.isnan(predictions_log)] = 0
 
@@ -199,9 +221,10 @@ def fit(self, X, y, nb_init=1, tree_depth=4):
                 self.criterion_iter.append([0])
 
                 for c_iter in range(df["c_map"].nunique()):
-                    idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter)
-                    logregs_c_map = np.append(logregs_c_map, logreg)
-                    model_c_map = np.append(model_c_map, model)
+                    # Statsmodels was used because more simplicity of use of criterions
+                    idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1)
+                    logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
+                    model_c_map = np.append(model_c_map, deepcopy(model))
                     _calculate_criterion(self, df, logregs_c_map, model_c_map, c_iter, i, idx)
 
                 # logger.info("The " + self.criterion + " criterion for iteration " + str(i) + " is: " + str(self.criterion_iter[i]))
@@ -243,13 +266,17 @@ def fit(self, X, y, nb_init=1, tree_depth=4):
             df = pd.DataFrame(X_copy)
             df = df.add_prefix("par_")
             df["y"] = y
-            df["constant_coeff"] = np.ones(self.n)
+            # Ajout d'un coefficient constant
+            # df["constant_coeff"] = np.ones(self.n)
             df["c_map"] = np.zeros(self.n)
             df["c_hat"] = df["c_map"]  # Not used in this case
             random_init = np.random.random((len(df), self.class_num))
             row_sums = random_init.sum(axis=1)
             proportion = random_init / row_sums[:, np.newaxis]
+            # If penalty ='l1', solver='liblinear' or 'saga', default=’lbfgs’
+            models=[LogisticRegression(penalty='l1', C=0.001,solver='liblinear', tol=1e-6, warm_start=True) for k in range(self.class_num)]
 
+            # MCMC steps
             for i in range(self.max_iter):
                 logregs_c_hat = np.array([])
                 logregs_c_map = np.array([])
@@ -257,11 +284,20 @@ def fit(self, X, y, nb_init=1, tree_depth=4):
                 predictions_log = np.zeros(shape=(self.n, self.class_num))
 
                 # Getting p(y | x, c_hat) and filling the probabilities/proportions
+
                 for c_iter in range(self.class_num):
-                    logreg, _ = _calculate_logreg_poids_c(df, proportion, c_iter)
+                    # logreg, _ = _calculate_logreg_poids_c(df, proportion, c_iter)
+                    weights = proportion[:, c_iter]
+                    y = df['y']
+                    X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                    model = models[c_iter]
+                    logreg = model.fit(X, y, weights)
+                    models[c_iter]=model
+
                     # Statsmodels was used because more simplicity of use of criterions
                     logregs_c_hat = np.append(logregs_c_hat, logreg)
                     to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
+                    to_predict = to_predict.to_numpy()
                     predictions_log[:, c_iter] = logreg.predict_proba(to_predict)[:, 1]
 
                 predictions_log[np.isnan(predictions_log)] = 0
@@ -298,7 +334,7 @@ def fit(self, X, y, nb_init=1, tree_depth=4):
                 # Burn in
                 if i >= 50:
                     for c_iter in range(df["c_map"].nunique()):
-                        idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter)
+                        idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1, cnvrg_tol=1e-8)
                         logregs_c_map = np.append(logregs_c_map, logreg)
                         model_c_map = np.append(model_c_map, model)
                         _calculate_criterion(self, df, logregs_c_map, model_c_map, c_iter, i, idx)
@@ -308,3 +344,63 @@ def fit(self, X, y, nb_init=1, tree_depth=4):
                         self.best_logreg = logregs_c_map
                         self.best_link = link
                         self.best_criterion = self.criterion_iter[i]
+
+
+def fit_func(X, y, algo='SEM', max_iter=100, tree_depth=5, class_num=10):
+    """Creates the glmtree model and fits it to the data
+            :param numpy.ndarray X:
+                array_like of shape (n_samples, n_features)
+                Vector to be scored, where `n_samples` is the number of samples and
+                `n_features` is the number of features
+            :param numpy.ndarray y:
+                Boolean (0/1) labels of the observations. Must be of
+                the same length as X
+                (numpy "numeric" array).
+            :param int max_iter:
+                Number of MCMC steps to perform.
+            :param int tree_depth:
+                Maximum depth of the tree used
+            :param int class_num:
+                Number of initial discretization intervals for all variables."""
+    model = glmtree.Glmtree(algo=algo, test=False, validation=False, criterion="aic", ratios=(0.7,),
+                            class_num=class_num,
+                            max_iter=max_iter)
+    model.fit(X, y, tree_depth=tree_depth)
+    return model
+
+
+def fit_parralized(X, y, algo='SEM', nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10):
+    """A fit function which creates tge model and fits it, where the random initilisations are parallized
+            :param numpy.ndarray X:
+                array_like of shape (n_samples, n_features)
+                Vector to be scored, where `n_samples` is the number of samples and
+                `n_features` is the number of features
+            :param numpy.ndarray y:
+                Boolean (0/1) labels of the observations. Must be of
+                the same length as X
+                (numpy "numeric" array).
+            :param int nb_init:
+                Number of different random initializations
+            :param int nb_jobs:
+                Number of jobs for the Parallelization
+                Default : -1, all CPU are used
+            :param int max_iter:
+                Number of MCMC steps to perform.
+            :param int tree_depth:
+                Maximum depth of the tree used
+            :param int class_num:
+                Number of initial discretization intervals for all variables."""
+    models = Parallel(n_jobs=nb_jobs)(
+        delayed(fit_func)(X, y, algo=algo, max_iter=max_iter, tree_depth=tree_depth, class_num=class_num) for k in
+        range(nb_init))
+    critere = -np.inf
+    best_model = None
+    for k in range(nb_init):
+        model = models[k]
+        criterion=model.best_criterion
+        # if type(criterion) is not float or int :
+        #     criterion=criterion[0]
+        if criterion > critere:
+            best_model = model
+            critere = model.best_criterion[0]
+    return best_model

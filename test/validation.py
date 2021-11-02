@@ -1,25 +1,31 @@
 import glmtree
 from glmtree.data_test import generate_data
+from glmtree.fit import fit_parralized
 from joblib import Parallel, delayed
 from sklearn import tree
 import matplotlib.pyplot as plt
+from sklearn.metrics import RocCurveDisplay
+import time
+import cProfile, pstats
 
-bon_critere1 = []
-bon_critere2 = []
-
-split1 = []
-split2 = []
-BIC = []
-bonne_forme = []
-bon_arbre = []
-theta_arbre = []
-
-#Affichage de l'arbre obtenu, None, texte ou image
-affichage=None
-
-n_data = [100, 300, 500, 700, 1000, 2000, 3000, 5000, 8000, 10000]
-
-# for n in n_data:
+# bon_critere1 = []
+# bon_critere2 = []
+#
+# split1 = []
+# split2 = []
+# BIC = []
+# bonne_forme = []
+# bon_arbre = []
+# theta_arbre = []
+#
+# # Affichage de l'arbre obtenu, None, texte ou image
+# affichage = None
+#
+# n_data = [100, 300, 500, 700, 1000, 2000, 3000, 5000, 8000, 10000]
+# n_iter = [80, 90, 100, 110, 120, 130, 140, 150]
+# n_para = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+#
+# for n in n_para:
 #     print(n)
 #     BIC_i = []
 #     forme_arbre = 0
@@ -27,22 +33,22 @@ n_data = [100, 300, 500, 700, 1000, 2000, 3000, 5000, 8000, 10000]
 #     theta_i = []
 #     split1_i = [[], [], []]
 #     split2_i = [[], [], []]
-#     X, y, theta, BIC_oracle = generate_data(n, 3)
+#     X, y, theta, BIC_oracle = generate_data(1000, 3)
 #
 #
 #     def fit_func(X, y, n_para):
-#         model = glmtree.Glmtree(test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10,
+#         model = glmtree.Glmtree(algo='EM', test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4,
 #                                 max_iter=100)
 #         model.fit(X, y, n_para, tree_depth=2)
 #         return model
 #
 #
-#     models = Parallel(n_jobs=2)(delayed(fit_func)(X, y, 5) for k in range(10))
+#     models = Parallel(n_jobs=2)(delayed(fit_func)(X, y, n) for k in range(40))
 #
-#     for k in range(10):
+#     for k in range(40):
 #         model = models[k]
 #         BIC_i.append(model.best_criterion[0])
-#         if affichage=='texte':
+#         if affichage == 'texte':
 #             text_representation = tree.export_text(model.best_link)
 #             print(text_representation)
 #         elif affichage == 'image':
@@ -80,17 +86,37 @@ n_data = [100, 300, 500, 700, 1000, 2000, 3000, 5000, 8000, 10000]
 #     split1.append(split1_i[0] + split1_i[1])
 #     split2.append(split2_i[0] + split2_i[1])
 #
-# print("Pourcentage bon critères :", bonne_forme)
-# print("Pourcentage bon modele :", bon_arbre)
-# print("Theta quand bon modèle :", theta_arbre)
-# print("BIC :", BIC)
-# print("Critere 1 :", bon_critere1)
-# print("Critere 2 :", bon_critere2)
-# print("Split 1 :", split1)
-# print("Split 2:", split2)
+# print("Bon_critere=", bonne_forme)
+# print("Bon_arbre=", bon_arbre)
+# print("Theta=", theta_arbre)
+# print("BIC=", BIC)
+# print("Bon_split1=", bon_critere1)
+# print("Bon_split2=", bon_critere2)
+# print("Split1=", split1)
+# print("Split2=", split2)
 
-X, y, theta, BIC_oracle = generate_data(1000, 3)
-model = glmtree.Glmtree(algo='EM', test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4, max_iter=100)
-model.fit(X, y, nb_init=5, tree_depth=2)
-text_representation = tree.export_text(model.best_link)
-print(text_representation)
+
+# X, y, theta, BIC_oracle = generate_data(10000, 3)
+# time0=time.time()
+# model = glmtree.Glmtree(algo='SEM', test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4, max_iter=100)
+# model.fit(X, y, nb_init=5, tree_depth=2)
+# # model=fit_parralized(X, y, algo='SEM', nb_init=5, tree_depth=2, class_num=4)
+# time1=time.time()
+# text_representation = tree.export_text(model.best_link)
+# print(text_representation)
+# print(time1 - time0)
+
+
+
+X, y, theta, BIC_oracle = generate_data(50000, 3)
+#X_test, y_test, _, _ =generate_data(1000, 3)
+
+model = glmtree.Glmtree(algo='SEM', test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4,
+                        max_iter=100)
+time0=time.time()
+model.fit(X, y, nb_init=1, tree_depth=2)
+time1=time.time()
+print(time1-time0)
+# y_proba = model.predict_proba(X_test)
+# RocCurveDisplay.from_predictions(y_test, y_proba)
+# plt.show()
