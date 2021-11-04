@@ -12,12 +12,14 @@ from sklearn.metrics import RocCurveDisplay
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.metrics import roc_auc_score
+from sklearn import tree
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 from sklearn import linear_model
 import matplotlib.pyplot as plt
 from glmtree.fit import fit_parralized
 import time
+
 
 def clean_data(data):
     """Retire les colonnes inutiles ou qui sont déjà des prédictions
@@ -242,6 +244,7 @@ def categorie_data_labels2(data):
 
     return data
 
+
 def categorie_data_labels(data, data_val):
     X = data.copy()
     X_val = data_val.copy()
@@ -252,8 +255,8 @@ def categorie_data_labels(data, data_val):
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option"]
     to_change = []
-    X_cat=[]
-    X_val_cat=[]
+    X_cat = []
+    X_val_cat = []
     for column in categorical:
         if column in X.columns:
             to_change.append(column)
@@ -274,212 +277,179 @@ def categorie_data_labels(data, data_val):
             X_num[column] = col.astype(np.int32)
             X_val_num[column] = col.astype(np.int32)
 
-    return pd.concat([X_num, X_cat], axis = 1), pd.concat([X_val_num, X_val_cat], axis = 1)
+    return pd.concat([X_num, X_cat], axis=1), pd.concat([X_val_num, X_val_cat], axis=1)
+
 
 def categorie_data_bin(data, data_val):
-    X=data.copy()
-    X_val=data_val.copy()
-    categorical=["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO", "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso", "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso", "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso", "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique", "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option"]
-    to_change=[]
+    X = data.copy()
+    X_val = data_val.copy()
+    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
+                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
+                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
+                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
+                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option"]
+    to_change = []
     for column in categorical:
         if column in X.columns:
             to_change.append(column)
             X[column].replace(to_replace=0, value=" ", inplace=True)
             X_val[column].replace(to_replace=0, value=" ", inplace=True)
     enc = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
-    X_cat=enc.fit_transform(X[to_change])
-    X_val_cat=enc.transform(X_val[to_change])
-    X_cat=pd.DataFrame(X_cat)
-    X_val_cat=pd.DataFrame(X_val_cat)
+    X_cat = enc.fit_transform(X[to_change])
+    X_val_cat = enc.transform(X_val[to_change])
+    X_cat = pd.DataFrame(X_cat)
+    X_val_cat = pd.DataFrame(X_val_cat)
 
-    X_num=X.drop(to_change, axis=1)
-    X_val_num=X_val.drop(to_change, axis=1)
+    X_num = X.drop(to_change, axis=1)
+    X_val_num = X_val.drop(to_change, axis=1)
 
     for column in X_num.columns:
         col = X_num[column]
-        if col.dtypes not in ("int32", "float64"):
+        print(col.dtypes)
+        if col.dtypes not in ["int32", "float64"]:
             X_num[column] = col.astype(np.int32)
             X_val_num[column] = col.astype(np.int32)
 
-    return pd.concat([X_num, X_cat], axis = 1), pd.concat([X_val_num, X_val_cat], axis = 1)
-
-Oups = ["DATE_DEBUT_OPT", "Date_fin_option", "Max_depass_retard_new_def"]
-Used = ["TOP_SEUIL_New_def", "Top_Forborne_sain", "NB_Credit", "top_exclu",
-        "Top_incident_3M", "Top_incident_6M", "Top_incident_12M", "Top_expo_M",
-        "Priorite_Option", "Type_Option", "Top_option", "Top_Debut_option", "Top_Inact_inv_12M", "Top_option_12M",
-        "NB_MOIS_CREATION_TIERS", "DAV_Null_SOLDE_MOYEN_M", "DAV_Null_NB_OPE_DEBIT_12M",
-        "CRED_Null_NB_JOURS_MAX_RETARD", "INDIC_PERS_INTERDIT_BANC", "DAV_Null_NB_TOT_JOURS_DEP_6M",
-        "DAV_Null_CPT_JOURS_CONS_DEP_M", "CRED_Null_NB_JOURS_CONS_RETARD", "CRED_Null_MAXJOUR_CONS_RET_12M",
-        "DAV_Null_NB_TOT_JOURS_DEP_12M", "DAV_Null_NB_TOT_JOURS_DEP_M", "DETTES_TOT_FLUX_CRED_TIERS",
-        "DAV_Null_MNT_REFUS_PAIEMT_12M", "DETTES_CT_DETTES_TOT_TIERS", "ENCOURS_RETARD_SUP90",
-        "DAV_Null_PLAFOND_DA_PERMANENT", "DAV_Null_SOLDE_MINIMUM_12M", "DAV_Null_SOLDE_MINIMUM_M",
-        "DAV_Null_NB_TOT_PMT_CARTE_12M", "DAV_Null_NB_REFUS_PAIEMT_M", "DAV_Null_NB_TOT_JOURS_DEP_3M",
-        "DAV_Null_SLD_MOY_CREDITEUR_M", "INTERETS_DEBIT_12M_TIERS", "DAV_Null_NB_REFUS_PAIEMT_6M",
-        "ENCOURS_RETARD_INF90", "NB_MOIS_CREATION_ENTREP", "DAV_Null_FLX_DBT_NBOPE_DEB_12",
-        "DAV_Null_MNT_REFUS_PAIEMENT_M", "DAV_Null_NBTOT_JOURS_DEBIT_6M", "DAV_Null_SOLDE_MOYEN_FLUX_12M",
-        "CAPACITE_JURIDIQUE", "EPARGNE_TOTALE", "INTERETS_DAV_FLUX", "ANCIEN_RELATION_G_RISQUE", "EPARGNE_LIVRET_GR",
-        "Regroup_CSP_Initiale", "ENGAGEMENTS_HORS_BILAN_GR_Calc", "Categ_NAF_Pro_Agri", "top_DAV", "Top_PP_GPP_Part"]
+    return pd.concat([X_num, X_cat], axis=1), pd.concat([X_val_num, X_val_cat], axis=1)
 
 
-data = pd.read_pickle("data_app.pkl")
-data_val = pd.read_pickle("data_val.pkl")
-
-
-# X = data[Used].copy()
-# X_val=data_val[Used].copy()
-# X = extreme_values(X)
-# X_val=extreme_values(X_val)
-
-# X_bin, X_bin_val = categorie_data_bin(X, X_val)
-# print(X_bin)
-# print(X_bin_val)
-# X_bin.to_pickle("X_bin.pkl")
-# X_bin_val.to_pickle("X_val_bin.pkl")
-
-# X_l, X_val_l = categorie_data_labels(X, X_val)
-# print(X_l)
-# print(X_val_l)
-# X_l.to_pickle("X_label.pkl")
-# X_val.to_pickle("X_val_label.pkl")
-
-# X = data[Used].copy()
-# X = extreme_values(X)
-# X_train = categorie_data_labels(X)
-# X_train.to_pickle("X_train.pkl")
-
-# X = data_val[Used].copy()
-# X = extreme_values(X)
-# X_test = categorie_data_labels(X)
-# X_test.to_pickle("X_test.pkl")
-
-X_train = pd.read_pickle("X_bin.pkl")
-X_train=X_train[:10000]
-print(X_train)
-
-
-X_test = pd.read_pickle("X_val_bin.pkl")
-X_test = X_test.drop("Exists_ENGAGEMENTS_HORS_BILAN_GR_Calc", axis=1)
-
-scaler = StandardScaler()
-X_train = scaler.fit_transform(X_train)
-X_test = scaler.transform(X_test)
-
-
-y = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
-y_train  = y.astype(np.int32)
-y_train = y_train[:10000]
-
-y = data_val["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
-y = y.astype(np.int32)
-y_test = y
+Used = ["DAV_Null_EHB_DAV", "DAV_Null_SLD_MOY_CREDITEUR_M", "DAV_Null_SOLDE_MOYEN_FLUX_12M", "DAV_Null_SOLDE_MOYEN_M",
+        "DAV_Null_SOLDE_MINIMUM_12M", "DAV_Null_FLX_DBT_NBOPE_DEB_12", "DAV_Null_MNT_REFUS_PAIEMENT_M",
+        "DAV_Null_MNT_REFUS_PAIEMT_12M", "DAV_Null_NB_REFUS_PAIEMT_3M", "DAV_Null_NB_REFUS_PAIEMT_6M",
+        "DAV_Null_NB_REFUS_PAIEMT_M", "DAV_Null_NBPREL_ORG_FINANC_6M", "DAV_Null_NB_TOT_JOURS_DEP_3M",
+        "DAV_Null_NB_TOT_JOURS_DEP_M", "DAV_Null_NB_TOT_JOURS_DEP_12M", "DAV_Null_NB_TOT_JOURS_DEP_6M",
+        "DAV_Null_NB_TOT_PMT_CARTE_12M", "DAV_Null_NBTOT_JOURS_DEBIT_6M", "DAV_Null_NB_OPE_DEBIT_12M",
+        "DAV_Null_NB_CARTES_DAV", "DAV_Null_NBJOURS_DPS_DEPASS",
+        "DAV_Null_CPT_JOURS_CONS_DEP_M", "INTERETS_DAV_FLUX", "INTERETS_DEBIT_12M_TIERS",
+        "CRED_Null_MAXJOUR_CONS_RET_12M", "CRED_Null_MNT_TOT_IMPAYE_CON", "CRED_Null_NB_JOURS_MAX_RETARD",
+        "CRED_Null_NB_JOURS_CONS_RETARD", "ENGAGEMENTS_HORS_BILAN_GR_Calc", "EPARGNE_TOTALE", "EPARGNE_LOGEMENT_GR",
+        "EPARGNE_LIVRET_GR", "ENCOURS_RETARD_INF90", "ENCOURS_RETARD_SUP90", "ANCIEN_RELATION_G_RISQUE",
+        "INDIC_PERS_INTERDIT_BANC", "Regroup_CSP_Initiale", "CAPACITE_JURIDIQUE", "Categ_NAF_Pro_Agri",
+        "TOP_SEUIL_New_def", "DETTES_CT_DETTES_TOT_TIERS", "DETTES_TOT_FLUX_CRED_TIERS", "DETTES_TOT_FLUX_CRED_PRO",
+        "NB_MOIS_CREATION_ENTREP"]
 
 
 
+if __name__ == "__main__":
+    data = pd.read_pickle("data_app.pkl")
+    data_val = pd.read_pickle("data_val.pkl")
 
-time0=time.time()
-model=fit_parralized(X_train, y_train, algo='EM', nb_init=1, nb_jobs=1, max_iter=100, tree_depth=4, class_num=10)
-time1=time.time()
-print("Time_fit :", time1-time0)
-y_proba = model.predict_proba(X_test)
-RocCurveDisplay.from_predictions(y_test, y_proba)
-plt.show()
-plt.close()
+    # Données avec les variables utilisées dans le modèle retail, binarisées, sans les colonnes indiquants Missing/Présent
+    # X = data[Used].copy()
+    # X_val=data_val[Used].copy()
+    # X = extreme_values(X, Missing=False)
+    # X_val=extreme_values(X_val, Missing=False)
+    # X_bin, X_bin_val = categorie_data_bin(X, X_val)
+    # X_bin.to_pickle("X_bina.pkl")
+    # X_bin_val.to_pickle("X_val_bina.pkl")
+
+    X_train = pd.read_pickle("X_bina.pkl")
+    X_train = X_train[:10000]
+    print(X_train)
+    X_test = pd.read_pickle("X_val_bina.pkl")
+
+    # # Retire les variables constantes, de variance 0
+    # selector = VarianceThreshold()
+    # X = selector.fit_transform(X)
+    # print(X.shape)
+
+    # Normalisation
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    y = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
+    y_train = y.astype(np.int32)
+    y_train = y_train[:10000]
+
+    y = data_val["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
+    y = y.astype(np.int32)
+    y_test = y
 
 
-# if __name__ == "__main__":
-#     data = pd.read_pickle("clean_data.pkl")
-#     data = categorie_data_labels(data)
-#
-#     y = data["Defaut_12_Mois_contagion"].to_numpy()
-#
-#     X = data.drop('Defaut_12_Mois_contagion', axis=1)
-#     print(X.shape)
-#
-#     # Retire les varibles constantes, de variance 0
-#     selector = VarianceThreshold()
-#     X = selector.fit_transform(X)
-#     print(X.shape)
-#
-#     X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
-#
-#     # Normalisation
-#     scaler = StandardScaler()
-#     X_train = scaler.fit_transform(X_train)
-#     X_test = scaler.transform(X_test)
-#
-#     print("Régression logistique :")
-#     modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
-#                                                     max_iter=100)
-#     modele_regLog.fit(X_train, y_train)
-#     proba = modele_regLog.predict_proba(X_test)
-#     y_proba = [proba[i][1] for i in range(len(proba))]
-#     RocCurveDisplay.from_predictions(y_test, y_proba)
-#     plt.title("Courbe ROC pour la régression logistique")
-#     tikzplotlib.save("ROC_reg_log.tex")
-#     plt.show()
-#     plt.close()
-#     # precision = modele_regLog.score(X_test, y_test)
-#
-#     print("Arbre de décision :")
-#     model_tree = DecisionTreeClassifier(min_samples_leaf=100, random_state=0)
-#     model_tree.fit(X_train, y_train)
-#     proba = model_tree.predict_proba(X_test)
-#     y_proba = [proba[i][1] for i in range(len(proba))]
-#     RocCurveDisplay.from_predictions(y_test, y_proba)
-#     plt.title("Courbe ROC pour l'arbre de décision")
-#     tikzplotlib.save("ROC_decision_tree.tex")
-#     plt.show()
-#     plt.close()
-#     # precision = model_tree.score(X_test, y_test)
-#
-#     print("Random forest :")
-#     model = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
-#     model.fit(X, y)
-#     proba = model.predict_proba(X_test)
-#     y_proba = [proba[i][1] for i in range(len(proba))]
-#     RocCurveDisplay.from_predictions(y_test, y_proba)
-#     plt.title("Courbe ROC pour Random Forest")
-#     tikzplotlib.save("ROC_rand_forest.tex")
-#     plt.show()
-#     plt.close()
-#     # precision = model.score(X_test, y_test)
-#
-#     print("Gradient Boosting :")
-#     model = GradientBoostingClassifier(min_samples_leaf=100, random_state=0)
-#     model.fit(X, y)
-#     proba = model.predict_proba(X_test)
-#     y_proba = [proba[i][1] for i in range(len(proba))]
-#     RocCurveDisplay.from_predictions(y_test, y_proba)
-#     plt.title("Courbe ROC pour Gradient Boosting")
-#     tikzplotlib.save("ROC_grad_boost.tex")
-#     plt.show()
-#     plt.close()
-#     # precision = model.score(X_test, y_test)
-#
-#     print("Réseau de neurones :")
-#     model = Sequential()
-#     model.add(Dense(12, input_dim=472, activation='relu'))
-#     model.add(Dense(8, activation='relu'))
-#     model.add(Dense(1, activation='sigmoid'))
-#     model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-#     model.fit(X_train, y_train, epochs=50, batch_size=10)
-#     y_proba = model.predict(X_test)
-#     RocCurveDisplay.from_predictions(y_test, y_proba)
-#     plt.title("Courbe ROC pour le réseau de neurones")
-#     tikzplotlib.save("ROC_neural.tex")
-#     plt.show()
-#     plt.close()
-#     # _, precision = model.evaluate(X_test, y_test)
+    print("Régression logistique :")
+    modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
+                                                    max_iter=100)
+    modele_regLog.fit(X_train, y_train)
+    proba = modele_regLog.predict_proba(X_test)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_test, y_proba)
+    plt.title("Courbe ROC pour la régression logistique")
+    # tikzplotlib.save("ROC_reg_log.tex")
+    plt.show()
+    plt.close()
+    # precision = modele_regLog.score(X_test, y_test)
 
-# print("GlmTree SEM :")
-# model = glmtree.Glmtree(algo='SEM', test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=10,
-#                         max_iter=100)
-# model.fit(X_train, y_train, nb_init=1, tree_depth=4)
-# y_proba = model.predict_proba(X_test)
-# AUC = roc_auc_score(y_test, y_proba)
-# RocCurveDisplay.from_predictions(y_test, y_proba)
-# plt.title("Courbe ROC pour le Glmtree")
-# tikzplotlib.save("ROC_glmtree.tex")
-# plt.show()
-# plt.close()
-# precision = model.precision(X_test, y_test)
+    print("Arbre de décision :")
+    model_tree = DecisionTreeClassifier(min_samples_leaf=100, random_state=0)
+    model_tree.fit(X_train, y_train)
+    proba = model_tree.predict_proba(X_test)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_test, y_proba)
+    plt.title("Courbe ROC pour l'arbre de décision")
+    # tikzplotlib.save("ROC_decision_tree.tex")
+    plt.show()
+    plt.close()
+    # precision = model_tree.score(X_test, y_test)
+
+    print("Random forest :")
+    model = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
+    model.fit(X_train, y_train)
+    proba = model.predict_proba(X_test)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_test, y_proba)
+    plt.title("Courbe ROC pour Random Forest")
+    # tikzplotlib.save("ROC_rand_forest.tex")
+    plt.show()
+    plt.close()
+    # precision = model.score(X_test, y_test)
+
+    print("Gradient Boosting :")
+    model = GradientBoostingClassifier(min_samples_leaf=100, random_state=0)
+    model.fit(X_train, y_train)
+    proba = model.predict_proba(X_test)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_test, y_proba)
+    plt.title("Courbe ROC pour Gradient Boosting")
+    # tikzplotlib.save("ROC_grad_boost.tex")
+    plt.show()
+    plt.close()
+    # precision = model.score(X_test, y_test)
+
+    print("Réseau de neurones :")
+    model = Sequential()
+    model.add(Dense(12, input_dim=X_train.shape[1], activation='relu'))
+    model.add(Dense(8, activation='relu'))
+    model.add(Dense(1, activation='sigmoid'))
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    model.fit(X_train, y_train, epochs=50, batch_size=10)
+    y_proba = model.predict(X_test)
+    RocCurveDisplay.from_predictions(y_test, y_proba)
+    plt.title("Courbe ROC pour le réseau de neurones")
+    # tikzplotlib.save("ROC_neural.tex")
+    plt.show()
+    plt.close()
+    # _, precision = model.evaluate(X_test, y_test)
+
+    print("GlmTree SEM :")
+    model = fit_parralized(X_train, y_train, algo='SEM', nb_init=10, tree_depth=5, class_num=15, max_iter=200)
+    y_proba = model.predict_proba(X_test)
+    # AUC = roc_auc_score(y_test, y_proba)
+    RocCurveDisplay.from_predictions(y_test, y_proba)
+    plt.title("Courbe ROC pour le Glmtree SEM")
+    # tikzplotlib.save("ROC_glmtree_SEM.tex")
+    plt.show()
+    plt.close()
+    # precision = model.precision(X_test, y_test)
+
+    print("GlmTree EM :")
+    model = fit_parralized(X_train, y_train, algo='EM', nb_init=10, tree_depth=5, class_num=15, max_iter=100)
+    y_proba = model.predict_proba(X_test)
+    AUC = roc_auc_score(y_test, y_proba)
+    RocCurveDisplay.from_predictions(y_test, y_proba)
+    plt.title("Courbe ROC pour le Glmtree EM")
+    # tikzplotlib.save("ROC_glmtree_EM.tex")
+    plt.show()
+    plt.close()
+    # precision = model.precision(X_test, y_test)

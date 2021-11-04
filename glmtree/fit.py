@@ -10,8 +10,29 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from loguru import logger
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
 from statsmodels.tools.sm_exceptions import PerfectSeparationError
+
+
+class OneClassReg():
+    def __init__(self, *args, **kwargs):
+        self._single_class_label = None
+        self.n_features_in_ = None
+
+    def fit(self, X, y, sample_weight=None):
+        self._single_class_label = y.iloc[0]
+        self.n_features_in_ = X.shape[1]
+        return self
+
+    def predict(self, X):
+        return np.full(X.shape[0], self._single_class_label)
+
+    def predict_proba(self, X):
+        if self._single_class_label == 1:
+            return np.full((X.shape[0], 2), [0, 1])
+        else:
+            return np.full((X.shape[0], 2), [1, 0])
 
 
 def _check_args(X, y):
@@ -100,39 +121,47 @@ def _calculate_logreg_c(df, c, c_iter, L1_wt=0, cnvrg_tol=1e-2, start_params=Non
     return idx, model_results, model
 
 
-def _calculate_criterion(self, df, logregs_c_map, model, c_iter, i, idx):
+def _calculate_criterion(self, df, model, i, idx):
     if self.criterion == "aic":
         if not self.validation:
+            y_true = df[idx & df.index.isin(self.train_rows)]["y"]
+            X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+            y_pred = model.predict_proba(X_pred)
             self.criterion_iter[i] = self.criterion_iter[i] \
-                                     + 2 * model[c_iter].loglike(logregs_c_map[c_iter].params) \
-                                     - len(logregs_c_map[c_iter].params)
+                                     - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) \
+                                     - model.n_features_in_
         else:
             y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
             X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            self.criterion_iter[i] = self.criterion_iter[i] + np.sum(
-                np.log(df.loc[idx & df.index.isin(self.validate_rows), :]["y"] * logregs_c_map[c_iter].predict(
-                    X_validate) + (1 - y_validate) * (1 - y_validate * logregs_c_map[c_iter].predict(X_validate))))
-    elif self.criterion == "bic":  # On calcule -BIC, qu'on va maximiser
+            y_pred = model.predict_proba(X_validate)
+            self.criterion_iter[i] = self.criterion_iter[i] \
+                                     - 2 * log_loss(y_validate, y_pred, normalize=False) \
+                                     - model.n_features_in_
+    elif self.criterion == "bic":
+        # On calcule -BIC, qu'on va maximiser
         if not self.validation:
             X_train = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            self.criterion_iter[i] = self.criterion_iter[i] + 2 * model[c_iter].loglike(logregs_c_map[c_iter].params) - \
-                                     np.log(len(X_train)) * len(logregs_c_map[c_iter].params)
+            y_pred = model.predict_proba(X_train)
+            y_true = df[idx & df.index.isin(self.validate_rows)]["y"]
+            self.criterion_iter[i] = self.criterion_iter[i] - 2 * log_loss(y_true, y_pred, normalize=False) - \
+                                     np.log(len(X_train)) * model.n_features_in_
 
         else:
             y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
             X_validate = df[idx & df.index.isin(self.validate_rows)][
                 df.columns.difference(["y", "c_map", "c_hat"])]
-            self.criterion_iter[i] = self.criterion_iter[i] + np.sum(np.log(
-                y_validate * logregs_c_map[c_iter].predict(X_validate) +
-                (1 - y_validate) * (1 - y_validate * logregs_c_map[c_iter].predict(X_validate))))
-    elif not self.validation:
-        a = np.hstack((df["y"], logregs_c_map[c_iter].fittedvalues))
-        self.criterion_iter[i] = np.concatenate((self.criterion_iter[i], a))
-    else:
-        y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
-        X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-        b = np.hstack((y_validate, logregs_c_map[c_iter].predict(X_validate)))
-        self.criterion_iter[i] = np.concatenate((self.criterion_iter[i], b))
+            y_pred = model.predict_proba(X_validate)
+            self.criterion_iter[i] = self.criterion_iter[i] \
+                                     - 2 * log_loss(y_validate, y_pred, normalize=False) \
+                                     - model.n_features_in_
+    # elif not self.validation:
+    #     a = np.hstack((df["y"], logregs_c_map[c_iter].fittedvalues))
+    #     self.criterion_iter[i] = np.concatenate((self.criterion_iter[i], a))
+    # else:
+    #     y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
+    #     X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+    #     b = np.hstack((y_validate, logregs_c_map[c_iter].predict(X_validate)))
+    #     self.criterion_iter[i] = np.concatenate((self.criterion_iter[i], b))
 
 
 def _vectorized_multinouilli(prob_matrix, items):
@@ -151,7 +180,6 @@ def _vectorized_multinouilli(prob_matrix, items):
     r = np.random.rand(prob_matrix.shape[0]).reshape((-1, 1))
     k = (s < r).sum(axis=1)
     return items[k]
-
 
 
 def fit(self, X, y, nb_init=1, tree_depth=10):
@@ -190,6 +218,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
             df["c_map"] = np.random.randint(self.class_num, size=self.n)
             df["c_hat"] = df["c_map"]
 
+            models = {}
+            for c_iter in range(self.class_num):
+                # If penalty ='l1', solver='liblinear' or 'saga', default=’lbfgs’
+                models[c_iter] = LogisticRegression(penalty='l2', C=1, tol=1e-4, warm_start=True)
+
             # Start of main logic
             for i in range(self.max_iter):
                 logregs_c_hat = np.array([])
@@ -198,22 +231,23 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 predictions_log = np.zeros(shape=(self.n, df["c_hat"].nunique()))
 
                 # Getting p(y | x, c_hat) and filling the probs
-                # penalty='l1', solver='liblinear'
-                models = [LogisticRegression(penalty='l2', C=0.001, tol=1e-2, warm_start=True) for k in
-                          range(df["c_hat"].nunique())]
-
                 for c_iter in range(df["c_hat"].nunique()):
-                    y = df['y']
-                    X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
-                    model = models[c_iter]
-                    logreg = model.fit(X, y)
-                    models[c_iter] = model
+                    idx = df["c_hat"] == np.sort(df["c_hat"].unique())[c_iter]
+                    train_data = df[idx]
+                    y = train_data['y']
+                    X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                    if y.nunique() == 1:
+                        # Pas une regression logistique, juste un modele qui assigne tout au seul label présent
+                        model = OneClassReg()
+                        logreg = model.fit(X, y)
+                    else:
+                        model = models[c_iter]
+                        logreg = model.fit(X, y)
+                        models[c_iter] = model
 
                     logregs_c_hat = np.append(logregs_c_hat, deepcopy(logreg))
-                    to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
-                    to_predict = to_predict.to_numpy()
+                    to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1).to_numpy()
                     predictions_log[:, c_iter] = logreg.predict(to_predict)
-
 
                 predictions_log[np.isnan(predictions_log)] = 0
 
@@ -221,12 +255,21 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 self.criterion_iter.append([0])
 
                 for c_iter in range(df["c_map"].nunique()):
-                    # Statsmodels was used because more simplicity of use of criterions
-                    idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1)
-                    logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
-                    model_c_map = np.append(model_c_map, deepcopy(model))
-                    _calculate_criterion(self, df, logregs_c_map, model_c_map, c_iter, i, idx)
+                    # idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1)
+                    idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+                    train_data = df[idx]
+                    y = train_data['y']
+                    X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                    if y.nunique() == 1:
+                        model = OneClassReg()
+                        logreg = model.fit(X, y)
+                    else:
+                        model = LogisticRegression(penalty='l2', C=1, tol=1e-4, warm_start=False)
+                        logreg = model.fit(X, y)
 
+                    logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
+                    model_c_map = np.append(model_c_map, model)
+                    _calculate_criterion(self, df, model, i, idx)
                 # logger.info("The " + self.criterion + " criterion for iteration " + str(i) + " is: " + str(self.criterion_iter[i]))
 
                 # Burn in
@@ -239,6 +282,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 # TODO add different partition methods support
                 # TODO add pass of control parameters
                 if df["c_hat"].nunique() > 1:
+                    X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
                     clf = DecisionTreeClassifier(max_depth=tree_depth).fit(X, df["c_hat"])
                     link = clf
                 else:
@@ -255,8 +299,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 matrix = np.multiply(link.predict_proba(X), masked_predictions_log)
                 row_sums = matrix.sum(axis=1)
                 p = matrix / row_sums[:, np.newaxis]
-                # # TODO: vectorized multinouilli
-                df["c_hat"] = _vectorized_multinouilli(p, df["c_hat"].unique())
+
 
     elif self.algo == 'EM':
         for k in range(nb_init):
@@ -266,15 +309,16 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
             df = pd.DataFrame(X_copy)
             df = df.add_prefix("par_")
             df["y"] = y
-            # Ajout d'un coefficient constant
-            # df["constant_coeff"] = np.ones(self.n)
             df["c_map"] = np.zeros(self.n)
             df["c_hat"] = df["c_map"]  # Not used in this case
             random_init = np.random.random((len(df), self.class_num))
             row_sums = random_init.sum(axis=1)
             proportion = random_init / row_sums[:, np.newaxis]
-            # If penalty ='l1', solver='liblinear' or 'saga', default=’lbfgs’
-            models=[LogisticRegression(penalty='l1', C=0.001,solver='liblinear', tol=1e-6, warm_start=True) for k in range(self.class_num)]
+
+            models = {}
+            for c_iter in range(self.class_num):
+                # If penalty ='l1', solver='liblinear' or 'saga', default=’lbfgs’
+                models[c_iter] = LogisticRegression(penalty='l2', C=1, tol=1e-2, warm_start=True)
 
             # MCMC steps
             for i in range(self.max_iter):
@@ -286,18 +330,17 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 # Getting p(y | x, c_hat) and filling the probabilities/proportions
 
                 for c_iter in range(self.class_num):
+                    # Statsmodels was used because more simplicity of use of criterions
                     # logreg, _ = _calculate_logreg_poids_c(df, proportion, c_iter)
                     weights = proportion[:, c_iter]
                     y = df['y']
                     X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
                     model = models[c_iter]
                     logreg = model.fit(X, y, weights)
-                    models[c_iter]=model
+                    models[c_iter] = model
 
-                    # Statsmodels was used because more simplicity of use of criterions
                     logregs_c_hat = np.append(logregs_c_hat, logreg)
-                    to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
-                    to_predict = to_predict.to_numpy()
+                    to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1).to_numpy()
                     predictions_log[:, c_iter] = logreg.predict_proba(to_predict)[:, 1]
 
                 predictions_log[np.isnan(predictions_log)] = 0
@@ -334,10 +377,21 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 # Burn in
                 if i >= 50:
                     for c_iter in range(df["c_map"].nunique()):
-                        idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1, cnvrg_tol=1e-8)
-                        logregs_c_map = np.append(logregs_c_map, logreg)
+                        # idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1, cnvrg_tol=1e-8)
+                        idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+                        train_data = df[idx]
+                        y = train_data['y']
+                        X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                        if y.nunique() == 1:
+                            model = OneClassReg()
+                            logreg = model.fit(X, y)
+                        else:
+                            model = LogisticRegression(penalty='l2', C=1, tol=1e-2, warm_start=False)
+                            logreg = model.fit(X, y)
+
+                        logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
                         model_c_map = np.append(model_c_map, model)
-                        _calculate_criterion(self, df, logregs_c_map, model_c_map, c_iter, i, idx)
+                        _calculate_criterion(self, df, model, i, idx)
 
                     # Best results
                     if self.criterion_iter[i] > self.best_criterion:
@@ -346,7 +400,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                         self.best_criterion = self.criterion_iter[i]
 
 
-def fit_func(X, y, algo='SEM', max_iter=100, tree_depth=5, class_num=10):
+def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, class_num=10):
     """Creates the glmtree model and fits it to the data
             :param numpy.ndarray X:
                 array_like of shape (n_samples, n_features)
@@ -362,14 +416,13 @@ def fit_func(X, y, algo='SEM', max_iter=100, tree_depth=5, class_num=10):
                 Maximum depth of the tree used
             :param int class_num:
                 Number of initial discretization intervals for all variables."""
-    model = glmtree.Glmtree(algo=algo, test=False, validation=False, criterion="aic", ratios=(0.7,),
-                            class_num=class_num,
-                            max_iter=max_iter)
+    model = glmtree.Glmtree(algo=algo, test=False, validation=False, criterion=criterion, ratios=(0.7,),
+                            class_num=class_num, max_iter=max_iter)
     model.fit(X, y, tree_depth=tree_depth)
     return model
 
 
-def fit_parralized(X, y, algo='SEM', nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10):
+def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10):
     """A fit function which creates tge model and fits it, where the random initilisations are parallized
             :param numpy.ndarray X:
                 array_like of shape (n_samples, n_features)
@@ -391,13 +444,13 @@ def fit_parralized(X, y, algo='SEM', nb_init=5, nb_jobs=-1, max_iter=100, tree_d
             :param int class_num:
                 Number of initial discretization intervals for all variables."""
     models = Parallel(n_jobs=nb_jobs)(
-        delayed(fit_func)(X, y, algo=algo, max_iter=max_iter, tree_depth=tree_depth, class_num=class_num) for k in
-        range(nb_init))
+        delayed(fit_func)(X, y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
+                          class_num=class_num) for k in range(nb_init))
     critere = -np.inf
     best_model = None
     for k in range(nb_init):
         model = models[k]
-        criterion=model.best_criterion
+        criterion = model.best_criterion
         # if type(criterion) is not float or int :
         #     criterion=criterion[0]
         if criterion > critere:

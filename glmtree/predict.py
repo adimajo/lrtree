@@ -3,6 +3,7 @@ Predict, predict_proba and precision methods for the Glmtree class
 """
 import pandas as pd
 import numpy as np
+from copy import deepcopy
 
 
 def predict(self, X):
@@ -23,15 +24,19 @@ def predict(self, X):
 
     X_df = pd.DataFrame(X)
     X_df["class"] = classes
-    proba = pd.DataFrame()
-    for i in range(len(liste_cla)):
-        bloc = X_df[X_df["class"] == liste_cla[i]].drop("class", axis=1)
-        bloc_pred = logreg[i].predict(bloc.add_prefix("par_"))
-        proba = proba.append(pd.DataFrame(bloc_pred), ignore_index=False)
-    proba = proba.sort_index()
-    prediction = (proba[0] > 0.5).astype('int32').to_numpy()
+    X_df["pred"] = 0
 
-    return prediction
+    for i in range(len(liste_cla)):
+        filtre = X_df["class"] == liste_cla[i]
+        bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
+        bloc_pred = logreg[i].predict(bloc.add_prefix("par_"))
+        k = 0
+        for j in range(len(X_df)):
+            if filtre[j]:
+                X_df.loc[j, "pred"] = bloc_pred[k]
+                k = k + 1
+
+    return X_df["pred"].to_numpy()
 
 
 def predict_proba(self, X):
@@ -52,15 +57,19 @@ def predict_proba(self, X):
 
     X_df = pd.DataFrame(X)
     X_df["class"] = classes
-    proba = pd.DataFrame()
-    for i in range(len(liste_cla)):
-        bloc = X_df[X_df["class"] == liste_cla[i]].drop("class", axis=1)
-        bloc_pred = logreg[i].predict(bloc.add_prefix("par_"))
-        proba = proba.append(pd.DataFrame(bloc_pred), ignore_index=False)
-    proba = proba.sort_index()
-    proba = proba[0].to_numpy()
+    X_df["pred"] = 0
 
-    return proba
+    for i in range(len(liste_cla)):
+        filtre = X_df["class"] == liste_cla[i]
+        bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
+        bloc_pred = logreg[i].predict_proba(bloc.add_prefix("par_"))
+        k = 0
+        for j in range(len(X_df)):
+            if filtre[j]:
+                X_df.loc[j, "pred"] = bloc_pred[k][1]
+                k = k + 1
+
+    return X_df["pred"].to_numpy()
 
 
 def precision(self, X_test, y_test):
