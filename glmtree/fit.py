@@ -126,14 +126,14 @@ def _calculate_criterion(self, df, model, i, idx):
         if not self.validation:
             y_true = df[idx & df.index.isin(self.train_rows)]["y"]
             X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_pred)
+            y_pred = model.predict_proba(X_pred.to_numpy())
             self.criterion_iter[i] = self.criterion_iter[i] \
                                      - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) \
                                      - model.n_features_in_
         else:
             y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
             X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_validate)
+            y_pred = model.predict_proba(X_validate.to_numpy())
             self.criterion_iter[i] = self.criterion_iter[i] \
                                      - 2 * log_loss(y_validate, y_pred, normalize=False) \
                                      - model.n_features_in_
@@ -141,7 +141,7 @@ def _calculate_criterion(self, df, model, i, idx):
         # On calcule -BIC, qu'on va maximiser
         if not self.validation:
             X_train = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_train)
+            y_pred = model.predict_proba(X_train.to_numpy())
             y_true = df[idx & df.index.isin(self.validate_rows)]["y"]
             self.criterion_iter[i] = self.criterion_iter[i] - 2 * log_loss(y_true, y_pred, normalize=False) - \
                                      np.log(len(X_train)) * model.n_features_in_
@@ -150,7 +150,7 @@ def _calculate_criterion(self, df, model, i, idx):
             y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
             X_validate = df[idx & df.index.isin(self.validate_rows)][
                 df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_validate)
+            y_pred = model.predict_proba(X_validate.to_numpy())
             self.criterion_iter[i] = self.criterion_iter[i] \
                                      - 2 * log_loss(y_validate, y_pred, normalize=False) \
                                      - model.n_features_in_
@@ -290,6 +290,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                     break
 
                 # c_map calculation
+                X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
                 df["c_map"] = np.argmax(link.predict_proba(X), axis=1)
 
                 # choice of the new c_hat

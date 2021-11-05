@@ -2,6 +2,7 @@ import numpy as np
 import glmtree
 import pandas as pd
 import tikzplotlib
+from copy import deepcopy
 import cProfile, pstats
 from keras.models import Sequential
 from keras.layers import Dense
@@ -290,14 +291,15 @@ def categorie_data_bin(data, data_val):
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option"]
     to_change = []
-    for column in categorical:
-        if column in X.columns:
+    for column in categorical :
+        if column in X.columns :
             to_change.append(column)
             X[column].replace(to_replace=0, value=" ", inplace=True)
             X_val[column].replace(to_replace=0, value=" ", inplace=True)
     enc = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
-    X_cat = enc.fit_transform(X[to_change])
-    X_val_cat = enc.transform(X_val[to_change])
+    X_cat = enc.fit_transform(deepcopy(X[to_change]))
+    X_val_cat = enc.transform(deepcopy(X_val[to_change]))
+
     X_cat = pd.DataFrame(X_cat)
     X_val_cat = pd.DataFrame(X_val_cat)
 
@@ -306,13 +308,20 @@ def categorie_data_bin(data, data_val):
 
     for column in X_num.columns:
         col = X_num[column]
-        print(col.dtypes)
         if col.dtypes not in ["int32", "float64"]:
-            X_num[column] = col.astype(np.int32)
-            X_val_num[column] = col.astype(np.int32)
+            X_num[column] = X_num[column].astype(np.int32)
+            X_val_num[column] = X_val_num[column].astype(np.int32)
 
-    return pd.concat([X_num, X_cat], axis=1), pd.concat([X_val_num, X_val_cat], axis=1)
+    # Need to reset the index for the concat to work well (when not same index)
+    X_cat=X_cat.reset_index(drop=True)
+    X_val_cat=X_val_cat.reset_index(drop=True)
+    X_num=X_num.reset_index(drop=True)
+    X_val_num=X_val_num.reset_index(drop=True)
 
+    X_train = pd.concat([X_num, X_cat], axis=1, ignore_index=True)
+    X_test = pd.concat([X_val_num, X_val_cat], axis=1, ignore_index=True)
+
+    return X_train, X_test
 
 Used = ["DAV_Null_EHB_DAV", "DAV_Null_SLD_MOY_CREDITEUR_M", "DAV_Null_SOLDE_MOYEN_FLUX_12M", "DAV_Null_SOLDE_MOYEN_M",
         "DAV_Null_SOLDE_MINIMUM_12M", "DAV_Null_FLX_DBT_NBOPE_DEB_12", "DAV_Null_MNT_REFUS_PAIEMENT_M",
@@ -329,25 +338,47 @@ Used = ["DAV_Null_EHB_DAV", "DAV_Null_SLD_MOY_CREDITEUR_M", "DAV_Null_SOLDE_MOYE
         "TOP_SEUIL_New_def", "DETTES_CT_DETTES_TOT_TIERS", "DETTES_TOT_FLUX_CRED_TIERS", "DETTES_TOT_FLUX_CRED_PRO",
         "NB_MOIS_CREATION_ENTREP"]
 
+Used_part = ["DAV_Null_EHB_DAV", "DAV_Null_NB_REFUS_PAIEMT_3M", "DAV_Null_SLD_MOY_CREDITEUR_M", "INTERETS_DAV_FLUX",
+             "INTERETS_DEBIT_12M_TIERS", "CRED_Null_MAXJOUR_CONS_RET_12M", "DAV_Null_NB_TOT_JOURS_DEP_3M",
+             "EPARGNE_TOTALE", "INDIC_PERS_INTERDIT_BANC", "Regroup_CSP_Initiale"]
+
+# # Courbe ROC score retail
+# data_score=pd.read_pickle("donnees Part/score_part_val.pkl")
+# y = data_score["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
+# y_proba=data_score["P_1"]
+# RocCurveDisplay.from_predictions(y, y_proba)
+# plt.title("Courbe ROC pour le retail")
+# plt.show()
+# plt.close()
 
 
 if __name__ == "__main__":
     data = pd.read_pickle("data_app.pkl")
     data_val = pd.read_pickle("data_val.pkl")
 
-    # Données avec les variables utilisées dans le modèle retail, binarisées, sans les colonnes indiquants Missing/Présent
+    # # Données avec les variables utilisées dans le modèle retail, binarisées, sans les colonnes indiquants Missing/Présent
     # X = data[Used].copy()
-    # X_val=data_val[Used].copy()
+    # X_val = data_val[Used].copy()
     # X = extreme_values(X, Missing=False)
-    # X_val=extreme_values(X_val, Missing=False)
-    # X_bin, X_bin_val = categorie_data_bin(X, X_val)
-    # X_bin.to_pickle("X_bina.pkl")
-    # X_bin_val.to_pickle("X_val_bina.pkl")
+    # X_val = extreme_values(X_val, Missing=False)
+    #
+    # X_train, X_test = categorie_data_bin(X, X_val)
+    #
+    # for column in X_train.columns:
+    #     if column not in X_test.columns:
+    #         print(column)
+    #         X_train = X_train.drop(column, axis=1)
+    # for column in X_test.columns:
+    #     if column not in X_train.columns:
+    #         print(column)
+    #         X_test = X_test.drop(column, axis=1)
+    #
+    # print(X_train)
+    # X_train.to_pickle("X_bin.pkl")
+    # X_test.to_pickle("X_bin_val.pkl")
 
-    X_train = pd.read_pickle("X_bina.pkl")
-    X_train = X_train[:10000]
-    print(X_train)
-    X_test = pd.read_pickle("X_val_bina.pkl")
+    X_train = pd.read_pickle("X_bin.pkl")
+    X_test = pd.read_pickle("X_bin_val.pkl")
 
     # # Retire les variables constantes, de variance 0
     # selector = VarianceThreshold()
@@ -361,12 +392,12 @@ if __name__ == "__main__":
 
     y = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
     y_train = y.astype(np.int32)
-    y_train = y_train[:10000]
 
     y = data_val["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
-    y = y.astype(np.int32)
-    y_test = y
+    y_test = y.astype(np.int32)
 
+    # y_train = y_train[:10000]
+    # X_train = X_train[:10000]
 
     print("Régression logistique :")
     modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
@@ -376,22 +407,32 @@ if __name__ == "__main__":
     y_proba = [proba[i][1] for i in range(len(proba))]
     RocCurveDisplay.from_predictions(y_test, y_proba)
     plt.title("Courbe ROC pour la régression logistique")
-    # tikzplotlib.save("ROC_reg_log.tex")
     plt.show()
     plt.close()
-    # precision = modele_regLog.score(X_test, y_test)
+    proba = modele_regLog.predict_proba(X_train)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_train, y_proba)
+    plt.title("Courbe ROC pour la régression logistique train")
+    plt.show()
+    plt.close()
+
 
     print("Arbre de décision :")
-    model_tree = DecisionTreeClassifier(min_samples_leaf=100, random_state=0)
+    model_tree = DecisionTreeClassifier(min_samples_leaf=500, random_state=0)
     model_tree.fit(X_train, y_train)
     proba = model_tree.predict_proba(X_test)
     y_proba = [proba[i][1] for i in range(len(proba))]
     RocCurveDisplay.from_predictions(y_test, y_proba)
     plt.title("Courbe ROC pour l'arbre de décision")
-    # tikzplotlib.save("ROC_decision_tree.tex")
     plt.show()
     plt.close()
-    # precision = model_tree.score(X_test, y_test)
+    proba = model_tree.predict_proba(X_train)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_train, y_proba)
+    plt.title("Courbe ROC pour l'arbre de décision")
+    plt.show()
+    plt.close()
+
 
     print("Random forest :")
     model = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
@@ -400,10 +441,15 @@ if __name__ == "__main__":
     y_proba = [proba[i][1] for i in range(len(proba))]
     RocCurveDisplay.from_predictions(y_test, y_proba)
     plt.title("Courbe ROC pour Random Forest")
-    # tikzplotlib.save("ROC_rand_forest.tex")
     plt.show()
     plt.close()
-    # precision = model.score(X_test, y_test)
+    proba = model.predict_proba(X_train)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_train, y_proba)
+    plt.title("Courbe ROC pour Random Forest")
+    plt.show()
+    plt.close()
+
 
     print("Gradient Boosting :")
     model = GradientBoostingClassifier(min_samples_leaf=100, random_state=0)
@@ -412,44 +458,39 @@ if __name__ == "__main__":
     y_proba = [proba[i][1] for i in range(len(proba))]
     RocCurveDisplay.from_predictions(y_test, y_proba)
     plt.title("Courbe ROC pour Gradient Boosting")
-    # tikzplotlib.save("ROC_grad_boost.tex")
     plt.show()
     plt.close()
-    # precision = model.score(X_test, y_test)
+    proba = model.predict_proba(X_train)
+    y_proba = [proba[i][1] for i in range(len(proba))]
+    RocCurveDisplay.from_predictions(y_train, y_proba)
+    plt.title("Courbe ROC pour Gradient Boosting")
+    plt.show()
+    plt.close()
 
-    print("Réseau de neurones :")
-    model = Sequential()
-    model.add(Dense(12, input_dim=X_train.shape[1], activation='relu'))
-    model.add(Dense(8, activation='relu'))
-    model.add(Dense(1, activation='sigmoid'))
-    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
-    model.fit(X_train, y_train, epochs=50, batch_size=10)
-    y_proba = model.predict(X_test)
-    RocCurveDisplay.from_predictions(y_test, y_proba)
-    plt.title("Courbe ROC pour le réseau de neurones")
-    # tikzplotlib.save("ROC_neural.tex")
-    plt.show()
-    plt.close()
+    # print("Réseau de neurones :")
+    # model = Sequential()
+    # model.add(Dense(12, input_dim=X_train.shape[1], activation='relu'))
+    # model.add(Dense(8, activation='relu'))
+    # model.add(Dense(1, activation='sigmoid'))
+    # model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    # model.fit(X_train, y_train, epochs=50, batch_size=10)
+    # y_proba = model.predict(X_test)
+    # RocCurveDisplay.from_predictions(y_test, y_proba)
+    # plt.title("Courbe ROC pour le réseau de neurones")
+    # # tikzplotlib.save("ROC_neural.tex")
+    # plt.show()
+    # plt.close()
     # _, precision = model.evaluate(X_test, y_test)
 
     print("GlmTree SEM :")
     model = fit_parralized(X_train, y_train, algo='SEM', nb_init=10, tree_depth=5, class_num=15, max_iter=200)
     y_proba = model.predict_proba(X_test)
-    # AUC = roc_auc_score(y_test, y_proba)
     RocCurveDisplay.from_predictions(y_test, y_proba)
     plt.title("Courbe ROC pour le Glmtree SEM")
-    # tikzplotlib.save("ROC_glmtree_SEM.tex")
     plt.show()
     plt.close()
-    # precision = model.precision(X_test, y_test)
-
-    print("GlmTree EM :")
-    model = fit_parralized(X_train, y_train, algo='EM', nb_init=10, tree_depth=5, class_num=15, max_iter=100)
-    y_proba = model.predict_proba(X_test)
-    AUC = roc_auc_score(y_test, y_proba)
-    RocCurveDisplay.from_predictions(y_test, y_proba)
-    plt.title("Courbe ROC pour le Glmtree EM")
-    # tikzplotlib.save("ROC_glmtree_EM.tex")
+    y_proba = model.predict_proba(X_train)
+    RocCurveDisplay.from_predictions(y_train, y_proba)
+    plt.title("Courbe ROC pour le Glmtree SEM")
     plt.show()
     plt.close()
-    # precision = model.precision(X_test, y_test)
