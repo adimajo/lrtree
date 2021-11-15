@@ -6,13 +6,11 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from copy import deepcopy
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
 from loguru import logger
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
-from statsmodels.tools.sm_exceptions import PerfectSeparationError
+
 
 
 class OneClassReg():
@@ -86,39 +84,6 @@ def _dataset_split(self):
     else:
         self.train_rows = np.random.choice(self.n, self.n, replace=False)
 
-
-def _calculate_logreg_poids_c(df, proportion, c_iter):
-    """Modèle de regression logisitque sur la feuille c_iter, en utilisant les éléments de df
-    avec leur proportion d'appartenance à cette feuille"""
-
-    weights = proportion[:, c_iter]
-    y = df['y']
-    X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
-    try:
-        # With L2 reg, a small C leads to a big regularisation
-        model = LogisticRegression(random_state=0, C=1000)
-        model_results = model.fit(X, y, weights)
-    except PerfectSeparationError as e:
-        msg = "Perfect separation in one of the leaves: cannot go further."
-        logger.error(msg)
-        raise e
-    return model_results, model
-
-
-def _calculate_logreg_c(df, c, c_iter, L1_wt=0, cnvrg_tol=1e-2, start_params=None):
-    idx = df[c] == np.sort(df[c].unique())[c_iter]
-    train_data = df[idx]
-    train_data = train_data.drop("c_map", axis=1)
-    train_data = train_data.drop("c_hat", axis=1)
-    formula = "y~" + "+".join(map(str, train_data.columns[train_data.columns != "y"].to_list()))
-    try:
-        model = smf.glm(formula=formula, data=train_data, family=sm.families.Binomial())
-        model_results = model.fit_regularized(alpha=0.001, L1_wt=L1_wt, start_params=start_params, cnvrg_tol=cnvrg_tol)
-    except PerfectSeparationError as e:
-        msg = "Perfect separation in one of the leaves: cannot go further."
-        logger.error(msg)
-        raise e
-    return idx, model_results, model
 
 
 def _calculate_criterion(self, df, model, i, idx):
@@ -255,7 +220,6 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 self.criterion_iter.append([0])
 
                 for c_iter in range(df["c_map"].nunique()):
-                    # idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1)
                     idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
                     train_data = df[idx]
                     y = train_data['y']
@@ -331,8 +295,6 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 # Getting p(y | x, c_hat) and filling the probabilities/proportions
 
                 for c_iter in range(self.class_num):
-                    # Statsmodels was used because more simplicity of use of criterions
-                    # logreg, _ = _calculate_logreg_poids_c(df, proportion, c_iter)
                     weights = proportion[:, c_iter]
                     y = df['y']
                     X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
@@ -378,7 +340,6 @@ def fit(self, X, y, nb_init=1, tree_depth=10):
                 # Burn in
                 if i >= 50:
                     for c_iter in range(df["c_map"].nunique()):
-                        # idx, logreg, model = _calculate_logreg_c(df, "c_map", c_iter, L1_wt=1, cnvrg_tol=1e-8)
                         idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
                         train_data = df[idx]
                         y = train_data['y']
