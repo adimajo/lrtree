@@ -112,7 +112,7 @@ X, y, theta, BIC_oracle = generate_data(10000, 3)
 X_test, y_test, _, _ =generate_data(10000, 3)
 
 time0=time.time()
-model=fit_parralized(X, y, algo='SEM', nb_init=10, tree_depth=2, class_num=4, max_iter=200)
+model=fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=10, tree_depth=2, class_num=4, max_iter=100)
 time1=time.time()
 print(time1-time0)
 text_representation = tree.export_text(model.best_link)
