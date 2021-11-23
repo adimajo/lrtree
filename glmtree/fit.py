@@ -85,9 +85,17 @@ def _dataset_split(self):
         self.train_rows = np.random.choice(self.n, self.n, replace=False)
 
 
-def calc_criterion(self, df, i, model_c_map):
+def calc_criterion(self, df, model_c_map):
+    """
+    Computes the criterion for this model.
+        :param pandas.Dataframe df: The dataframe of the data used
+        :param list model_c_map: The list of the models for each leaf.
+        :returns: The criteria.
+        :rtype: float
+        """
+    criterion = 0
     if self.criterion == "gini":
-        # On calcule l'AUC, qu'on va maximiser
+        # Computing the Area Under Curve of the ROC curve, which we maximise
         y_true = []
         y_proba = []
         k = 0
@@ -100,14 +108,16 @@ def calc_criterion(self, df, i, model_c_map):
             else:
                 y_validate = df[idx & df.index.isin(self.train_rows)]["y"].tolist()
                 X_validate = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            pred = model.predict_proba(X_validate.to_numpy())
-            y_pred = [pred[i][1] for i in range(len(pred))]
-            y_true = [*y_true, *y_validate]
-            y_proba = [*y_proba, *y_pred]
+            if X_validate.shape[0] > 0:
+                pred = model.predict_proba(X_validate.to_numpy())
+                y_pred = [pred[i][1] for i in range(len(pred))]
+                y_true = [*y_true, *y_validate]
+                y_proba = [*y_proba, *y_pred]
             k = k + 1
-        self.criterion_iter[i] = roc_auc_score(y_true, y_proba)
+        criterion = roc_auc_score(y_true, y_proba)
+
     elif self.criterion == "aic":
-        # On calcule -AIC, qu'on va maximiser
+        # Computing -AIC, which we maximise
         if self.validation:
             k = 0
             for c_iter in range(df["c_map"].nunique()):
@@ -115,10 +125,10 @@ def calc_criterion(self, df, i, model_c_map):
                 idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
                 y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
                 X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-                y_pred = model.predict_proba(X_validate.to_numpy())
-                self.criterion_iter[i] = self.criterion_iter[i] \
-                                         - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
-                                         - model.n_features_in_
+                if X_validate.shape[0] > 0:
+                    y_pred = model.predict_proba(X_validate.to_numpy())
+                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
+                                - model.n_features_in_
                 k = k + 1
         else:
             k = 0
@@ -128,12 +138,12 @@ def calc_criterion(self, df, i, model_c_map):
                 y_true = df[idx & df.index.isin(self.train_rows)]["y"]
                 X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
                 y_pred = model.predict_proba(X_pred.to_numpy())
-                self.criterion_iter[i] = self.criterion_iter[i] \
-                                         - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) \
-                                         - model.n_features_in_
+                criterion = criterion - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) \
+                            - model.n_features_in_
                 k = k + 1
+
     elif self.criterion == "bic":
-        # On calcule -BIC, qu'on va maximiser
+        # Computing -BIC, which we maximise
         if self.validation:
             k = 0
             for c_iter in range(df["c_map"].nunique()):
@@ -141,10 +151,10 @@ def calc_criterion(self, df, i, model_c_map):
                 idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
                 y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
                 X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-                y_pred = model.predict_proba(X_validate.to_numpy())
-                self.criterion_iter[i] = self.criterion_iter[i] \
-                                         - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
-                                         - np.log(len(X_validate)) * model.n_features_in_
+                if X_validate.shape[0] > 0:
+                    y_pred = model.predict_proba(X_validate.to_numpy())
+                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
+                                - np.log(len(X_validate)) * model.n_features_in_
                 k = k + 1
         else:
             k = 0
@@ -154,47 +164,13 @@ def calc_criterion(self, df, i, model_c_map):
                 y_true = df[idx & df.index.isin(self.train_rows)]["y"]
                 X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
                 y_pred = model.predict_proba(X_pred.to_numpy())
-                self.criterion_iter[i] = self.criterion_iter[i] - 2 * log_loss(y_true, y_pred,
-                                                                                                        normalize=False,
-                                                                                                        labels=[0, 1]) - \
-                                                                  np.log(len(X_pred)) * model.n_features_in_
+                criterion = criterion - 2 * log_loss(y_true, y_pred,
+                                                     normalize=False,
+                                                     labels=[0, 1]) - \
+                            np.log(len(X_pred)) * model.n_features_in_
                 k = k + 1
 
-
-def _calculate_criterion(self, df, model, i, idx):
-    if self.criterion == "aic":
-        if not self.validation:
-            y_true = df[idx & df.index.isin(self.train_rows)]["y"]
-            X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_pred.to_numpy())
-            self.criterion_iter[i] = self.criterion_iter[i] \
-                                     - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) \
-                                     - model.n_features_in_
-        else:
-            y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
-            X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_validate.to_numpy())
-            self.criterion_iter[i] = self.criterion_iter[i] \
-                                     - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
-                                     - model.n_features_in_
-    elif self.criterion == "bic":
-        # On calcule -BIC, qu'on va maximiser
-        if not self.validation:
-            X_train = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_train.to_numpy())
-            y_true = df[idx & df.index.isin(self.validate_rows)]["y"]
-            self.criterion_iter[i] = self.criterion_iter[i] - 2 * log_loss(y_true, y_pred, normalize=False,
-                                                                           labels=[0, 1]) - \
-                                     np.log(len(X_train)) * model.n_features_in_
-
-        else:
-            y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
-            X_validate = df[idx & df.index.isin(self.validate_rows)][
-                df.columns.difference(["y", "c_map", "c_hat"])]
-            y_pred = model.predict_proba(X_validate.to_numpy())
-            self.criterion_iter[i] = self.criterion_iter[i] \
-                                     - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
-                                     - np.log(len(X_validate)) * model.n_features_in_
+    return criterion
 
 
 def _vectorized_multinouilli(prob_matrix, items):
@@ -219,7 +195,7 @@ def _vectorized_multinouilli(prob_matrix, items):
     return items[k]
 
 
-def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
+def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, OptimalSize=True):
     """Fits the Glmtree object.
 
         :param numpy.ndarray X:
@@ -234,6 +210,10 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
             Number of different random initializations
         :param int tree_depth:
             Maximum depth of the tree used
+        :param float min_impurity_decrease:
+            Parameter used to split (or not) the decision Tree
+        :param bool OptimalSize:
+            Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
         """
     _check_args(X, y)
 
@@ -270,11 +250,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
                 # Getting p(y | x, c_hat) and filling the probs
                 for c_iter in range(df["c_hat"].nunique()):
                     idx = df["c_hat"] == np.sort(df["c_hat"].unique())[c_iter]
-                    train_data = df[idx]
+                    train_data = df[idx & df.index.isin(self.train_rows)]
                     y = train_data['y']
                     X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
                     if y.nunique() == 1:
-                        # Pas une regression logistique, juste un modele qui assigne tout au seul label présent
+                        # A model for when there is only one class (not a regression)
                         model = OneClassReg()
                         logreg = model.fit(X, y)
                     else:
@@ -293,7 +273,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
 
                 for c_iter in range(df["c_map"].nunique()):
                     idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
-                    train_data = df[idx]
+                    train_data = df[idx & df.index.isin(self.train_rows)]
                     y = train_data['y']
                     X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
                     if y.nunique() == 1:
@@ -305,12 +285,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
 
                     logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
                     model_c_map = np.append(model_c_map, model)
-                    # _calculate_criterion(self, df, model, i, idx)
 
-                # Gettting the total criterion
-                calc_criterion(self, df, i, model_c_map)
+                # Gettting the total criterion, for this model (tree + reg) proposition
+                self.criterion_iter[i] = calc_criterion(self, df, model_c_map)
 
-                # Best model
+                # Best model yet
                 if self.criterion_iter[i] > self.best_criterion:
                     # Stopping when the criterion doesn't really get better anymore
                     if self.criterion == "gini" and i >= 30 and abs(
@@ -343,19 +322,34 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
 
                 # Getting p(c_hat | x)
                 if df["c_hat"].nunique() > 1:
-                    X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
-                    clf = DecisionTreeClassifier(max_depth=tree_depth, min_impurity_decrease=min_impurity_decrease).fit(X, df[
-                        "c_hat"])
+                    X = df.drop(['y', 'c_map', 'c_hat'], axis=1)
+                    X = X[df.index.isin(self.train_rows)].to_numpy()
+
+                    clf = DecisionTreeClassifier(max_depth=tree_depth, min_impurity_decrease=min_impurity_decrease).fit(
+                        X, df[df.index.isin(self.train_rows)]["c_hat"])
                     link = clf
+                    
+                    if OptimalSize and self.validation:
+                        X_validate = df.drop(['y', 'c_map', 'c_hat'], axis=1)
+                        X_validate = X_validate[df.index.isin(self.validate_rows)]
+                        path = clf.cost_complexity_pruning_path(X, df[df.index.isin(self.train_rows)]["c_hat"])
+                        alphas = path.ccp_alphas
+                        # Tree propositions, with more or less pruning
+                        best_score = 0
+                        for alpha in alphas:
+                            tree = DecisionTreeClassifier(ccp_alpha=alpha)
+                            tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
+                            score = tree.score(X_validate, df[df.index.isin(self.validate_rows)]["c_hat"])
+                            # Choosing the tree with the best accuracy on the validation set
+                            if score > best_score:
+                                link = tree
+
                 else:
                     logger.info("The tree has only its root! Premature end of algorithm.")
                     break
 
-                # c_map calculation
-                X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
-                df["c_map"] = np.argmax(link.predict_proba(X), axis=1)
-
                 # Choice of the new c_hat = random step
+                X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
                 y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
                 masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) \
                                          + np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
@@ -363,6 +357,10 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
                 row_sums = matrix.sum(axis=1)
                 p = matrix / row_sums[:, np.newaxis]
                 df["c_hat"] = _vectorized_multinouilli(p, df["c_hat"].unique())
+
+                # c_map calculation
+                X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                df["c_map"] = np.argmax(link.predict_proba(X), axis=1)
 
                 i = i + 1
 
@@ -454,10 +452,9 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
 
                     logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
                     model_c_map = np.append(model_c_map, model)
-                    # _calculate_criterion(self, df, model, i, idx)
 
                 # Getting the total criterion
-                calc_criterion(self, df, i, model_c_map)
+                self.criterion_iter[i]  = calc_criterion(self, df, model_c_map)
                 # Best results
                 if self.criterion_iter[i] > self.best_criterion:
                     # Stopping when the criterion doesn't really get better anymore
@@ -488,7 +485,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0):
                 i = i + 1
 
 
-def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, class_num=10, validation=False, min_impurity_decrease=0.0):
+def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, class_num=10, validation=False,
+             min_impurity_decrease=0.0, OptimalSize=True):
     """Creates the glmtree model and fits it to the data
             :param numpy.ndarray X:
                 array_like of shape (n_samples, n_features)
@@ -506,11 +504,12 @@ def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, clas
                 Number of initial discretization intervals for all variables."""
     model = glmtree.Glmtree(algo=algo, test=False, validation=validation, criterion=criterion, ratios=(0.7,),
                             class_num=class_num, max_iter=max_iter)
-    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease)
+    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, OptimalSize=OptimalSize)
     return model
 
 
-def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10, min_impurity_decrease=0.0,
+def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10,
+                   min_impurity_decrease=0.0, OptimalSize=True,
                    validation=False):
     """A fit function which creates tge model and fits it, where the random initilisations are parallized
             :param numpy.ndarray X:
@@ -534,14 +533,13 @@ def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max
                 Number of initial discretization intervals for all variables."""
     models = Parallel(n_jobs=nb_jobs)(
         delayed(fit_func)(X, y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
-                          class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease) for k in range(nb_init))
+                          class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease, OptimalSize=OptimalSize) for k
+        in range(nb_init))
     critere = -np.inf
     best_model = None
     for k in range(nb_init):
         model = models[k]
         criterion = model.best_criterion
-        # if type(criterion) is not float or int :
-        #     criterion=criterion[0]
         if criterion > critere:
             best_model = model
             critere = model.best_criterion
