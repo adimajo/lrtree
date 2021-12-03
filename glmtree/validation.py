@@ -6,7 +6,6 @@ from sklearn import tree
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
 import time
-import cProfile, pstats
 
 # bon_critere1 = []
 # bon_critere2 = []
@@ -117,7 +116,8 @@ time1=time.time()
 print(time1-time0)
 text_representation = tree.export_text(model.best_link)
 print(text_representation)
-print(model.best_logreg)
+models = model.best_logreg
+print([mod.coef_ for mod in models])
 print("Precision", model.precision(X_test, y_test))
 y_proba = model.predict_proba(X_test)
 RocCurveDisplay.from_predictions(y_test, y_proba)

@@ -2,19 +2,16 @@ import numpy as np
 import glmtree
 import pandas as pd
 import tikzplotlib
-from copy import deepcopy
-import cProfile, pstats
+from pandas.core.common import flatten
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import RocCurveDisplay
 from sklearn.metrics import roc_auc_score
+from sklearn import metrics
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.feature_selection import VarianceThreshold
 from sklearn.metrics import roc_auc_score
 from sklearn import tree
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 from sklearn import linear_model
 import matplotlib.pyplot as plt
 from glmtree.fit import fit_parralized
@@ -23,6 +20,8 @@ import time
 import vertica_python
 from verticapy.connect import *
 from verticapy import vDataFrame
+
+from traitement_data import *
 
 conn_info = {"host": "10.56.122.83",
              "port": 5433,
@@ -40,361 +39,6 @@ conn_info = {"host": "10.56.122.83",
              # connection timeout is not enabled by default
              # 5 seconds timeout for a socket operation (Establishing a TCP connection or read/write operation)
              "connection_timeout": 100000}
-
-
-def clean_data(data):
-    """Retire les colonnes inutiles ou qui sont déjà des prédictions
-
-    :param pandas.Dataframe data:
-        Data to clean
-    """
-    data["Defaut_12_Mois_contagion"] = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)])
-
-    # A ne pas utiliser
-    Pas_utiles = ['ACTIVITE_ECO_ENTREP_APE', 'ACTIVITE_ECO_ETABLIST_NAF', 'CATEGORIE_JURIDIQUE', 'CLASSE_NOTA_TIERS',
-                  'CODE_AGENCE', 'CODE_COMMUNE_ADRESSE', 'CODE_RESIDENT_FISCALITE',
-                  'CRED_Null_BIEN_FINANCE', 'CRED_Null_BIEN_FINANCE_CONSO', 'CRED_Null_BIEN_FINANCE_HAB',
-                  'CRED_Null_CATEGORIE_PRET', 'CRED_Null_CATEGORIE_PRET_CONSO',
-                  'CRED_Null_CATEGORIE_PRET_HAB', 'CRED_Null_CATEGORIE_PRET_REVLG', 'CRED_Null_DEST_FINANCE',
-                  'CRED_Null_DEST_FINANCE_CONSO', 'CRED_Null_DEST_FINANCE_HAB',
-                  'CRED_Null_DOMAINE_INTERV', 'CRED_Null_DOMAINE_INTERV_CONSO', 'CRED_Null_DOMAINE_INTERV_HAB',
-                  'CRED_Null_NB_EC_DEF_HS_CONTAG', 'CSP_INITIALE', 'DATE_ARRETE',
-                  'DATE_CLOS_GROUPE_RISQUE', 'DATE_CREATION_ENTREPRISE', 'DATE_CREATION_ETABLIST',
-                  'DATE_CREATION_TIERS', 'DATE_DEBUT_OPT', 'DATE_INSTAL_DIRIGEANT', 'DATE_MODIF_GROUPE_RISQUE',
-                  'DATE_MODIF_SEGMENT_GR', 'DATE_MODIF_SEGMENT_TIERS', 'DATE_NAISSANCE_DIRIGEANT',
-                  'DATE_NAISSANCE_TIERS', 'DATE_SORTIE_DEFAUT_TIERS', 'DATE_SURVENUE_DEFAUT_New',
-                  'DATE_SURVENUE_DEFAUT_TIERS',
-                  'Date_fin_option', 'Defaut_12_Mois_No_contagion', 'Defaut_12_mois_New', 'FIN_TYPO_DFT_SCEN2',
-                  'GRADE_ACTUEL', 'GRADE_PD_PA_SIM_New', 'IDENTIFIANT_COMMERCIAL', 'ID_CR',
-                  'ID_GROUPE_RISQUE', 'ID_TIERS', 'INDIC_DA_NON_PERM_TIERS', 'INDIC_DA_PERMANENT_TIERS', 'INDIC_GPT',
-                  'INDIC_PERS_DECES', 'INDIC_PERS_GLOBAL_12M', 'INDIC_PERS_GLOBAL_3M', 'INDIC_PERS_GLOBAL_6M',
-                  'INDIC_PERS_GLOBAL_M',
-                  'INDIC_PERS_INTERDIT_BANC', 'INDIC_TIERS_DOUTEUX', 'INDIC_TIERS_GLOBAL_12M', 'INDIC_TIERS_GLOBAL_3M',
-                  'INDIC_TIERS_GLOBAL_6M', 'INDIC_TIERS_GLOBAL_M', 'NBPP_LUC_GPT', 'NBPP_TOT_GPT',
-                  'NB_JOURS_DPS_DEB_DEF_TIERS', 'NB_JOURS_DPS_FIN_DEF_TIERS',
-                  'NOTE_MIN_CPTABLE_AGRI', 'NOTE_MIN_CPTABLE_PRO', 'NOTE_MOY_CPTABLE_AGRI', 'NOTE_MOY_CPTABLE_PRO',
-                  'NOTE_MOY_POND_CPTABLE_AGR', 'NOTE_MOY_POND_CPTABLE_PRO', 'NUMERO_SIREN', 'RETOUR_SAIN_SCEN2',
-                  'SEGMENT_NOTATION', 'SITUATION_FAMILIALE',
-                  'SIT_PARTICULIERE_PAR', 'SIT_PARTICULIERE_PRO', 'TIERS_CLOS_M', 'TYPE_TIERS', 'Top_Forborne_sain',
-                  'Top_defaut_contagion', 'Top_defaut_no_contagion', 'Typo_DFT', 'defaut_12_mois_tiers_old_def',
-                  'perimetre_modele', 'top_exclu']
-    data = data.drop(Pas_utiles, axis=1)
-
-    rows = ['cohort_concat', 'nb_date_arrete', 'cohort_debut', 'cohort_fin', 'pct_top_defaut', 'Total',
-            'AllocProportion',
-            'SampleSize', 'ActualProportion', 'SelectionProb', 'SamplingWeight']
-    data = data.drop(rows, axis=1)
-
-    # Valeurs répétitives et trop corrélées
-    # Repetitions = ["Top_incident_New_def_M", "Top_incident_New_def_3M", "Top_incident_New_def_12M", "Top_expo_M",
-    #                "Top_Expo_3M", "Top_Expo_12M", "Top_Inact_M", "Top_Inact_3M", "Top_Inact_12M", "Top_DETTES_CT_M",
-    #                "Top_DETTES_CT_3M", "Top_DETTES_CT_12M",
-    #                "Top_Inact_inv_M", "Top_Inact_inv_3M", "Top_Inact_12M", "Top_Inact_M", "Top_Inact_3M",
-    #                "Top_Inact_inv_12M", "Top_option_M", "Top_option_3M", "Top_option_12M", "Top_activite_1M",
-    #                "Top_activite_3M", "Top_activite_12M", "flag_recent_6", "flag_recent_12", "flag_recent_24",
-    #                "DAV_Null_SOLDE_MOYEN_M", "DAV_Null_SOLDE_MOYEN_6M", "DAV_Null_SOLDE_MOYEN_12M",
-    #                "DAV_Null_SOLDE_MOY_CREDIT_3M", "DAV_Null_SOLDE_MOY_CREDIT_12M", "DAV_Null_SOLDE_MINIMUM_M",
-    #                "DAV_Null_SOLDE_MINIMUM_3M", "DAV_Null_SOLDE_MINIMUM_12M",
-    #                "DAV_Null_NBTOT_JOURS_DEBIT_3M", "DAV_Null_NBTOT_JOURS_DEBIT_12M", "DAV_Null_NBPREL_ORG_FINANC_3M",
-    #                "DAV_Null_NBPREL_ORG_FINANC_12M", "DAV_Null_NB_TOT_PMT_CARTE_M", "DAV_Null_NB_TOT_PMT_CARTE_3M",
-    #                "DAV_Null_NB_TOT_PMT_CARTE_12M",
-    #                "DAV_Null_NB_TOT_JOURS_DEP_M", "DAV_Null_NB_TOT_JOURS_DEP_3M", "DAV_Null_NB_TOT_JOURS_DEP_12M",
-    #                "DAV_Null_NB_REFUS_PAIEMT_M", "DAV_Null_NB_REFUS_PAIEMT_3M", "DAV_Null_NB_REFUS_PAIEMT_12M",
-    #                "DAV_Null_NB_PMT_CARTE_DD_3M", "DAV_Null_NB_PMT_CARTE_DD_12M",
-    #                "DAV_Null_NB_OPE_DEBIT_M", "DAV_Null_NB_OPE_DEBIT_3M", "DAV_Null_NB_OPE_DEBIT_12M",
-    #                "DAV_Null_NB_OPE_CREDIT_M", "DAV_Null_NB_OPE_CREDIT_3M", "DAV_Null_NB_OPE_CREDIT_12M",
-    #                "DAV_Null_NB_DAV_DEP_M", "DAV_Null_NB_DAV_DEP_3M", "DAV_Null_NB_DAV_DEP_12M",
-    #                "DAV_Null_NB_DAV_DEBIT_M", "DAV_Null_NB_DAV_DEBIT_3M", "DAV_Null_NB_DAV_DEBIT_12M",
-    #                "DAV_Null_MNT_REFUS_PAIEMENT_M", "DAV_Null_MNT_REFUS_PAIEMT_3M", "DAV_Null_MNT_REFUS_PAIEMT_12M",
-    #                "DAV_Null_MNT_PREL_ORG_FINAN_M", "DAV_Null_MNT_PREL_ORG_FINA_3M", "DAV_Null_MNT_PRE_ORG_FINA_12M",
-    #                "DAV_Null_MNT_PMT_CARTE_DD_M", "DAV_Null_MNT_PMT_CARTE_DD_3M", "DAV_Null_MNT_PMT_CARTE_DD_12M",
-    #                "DAV_Null_MNT_PAIEMT_CARTE_M", "DAV_Null_MNT_PAIEMT_CARTE_3M", "DAV_Null_MNT_PAIEMT_CARTE_12M",
-    #                "DAV_Null_MAXJOUR_CONS_DEP_3M", "DAV_Null_MAXJOUR_CONS_DEP_12M",
-    #                "DAV_Null_MAXJOUR_CONS_DBT_3M", "DAV_Null_MAXJOUR_CONS_DBT_12M", "DAV_Null_FLX_CRED_DOM_MOY_3M",
-    #                "DAV_Null_FLX_CRED_DOM_MOY_12M", "CRED_Null_NBMAX_IMP_12M", "CRED_Null_NBMAX_IMP_12M_CON",
-    #                "CRED_Null_NBMAX_IMP_12M_HAB", "CRED_Null_NBMAX_IMP_12M_REV",
-    #                "CRED_Null_NBMAX_IMP_3M", "CRED_Null_NBMAX_IMP_3M_CON", "CRED_Null_NBMAX_IMP_3M_HAB",
-    #                "CRED_Null_NBMAX_IMP_3M_REV", "CRED_Null_NBFOIS_1_IMP_12M", "CRED_Null_NBFOIS_1_IMP_12M_CON",
-    #                "CRED_Null_NBFOIS_1_IMP_12M_HAB", "CRED_Null_NBFOIS_1_IMP_12M_REV",
-    #                "CRED_Null_MAXJOUR_CONS_RET_3M", "CRED_Null_MAXJOUR_CONS_RET_12M"]
-    # data = data.drop(Repetitions, axis=1)
-    return data
-
-
-def extreme_values(data, Missing=True):
-    """Gère les valeurs extremes (ex : car non renseignées, ou NaN),
-    crée (ou non) une colonne pour indiquer les valeurs manquantes (et ayant été remplies par 0)
-
-        :param pandas.Dataframe data:
-            Data to clean
-        :param Bool Missing:
-            Souhaite-t-on crér les colonnes pour les valeurs manquantes
-    """
-    # Valeurs extremes quand valeurs manquantes
-    extremes = [99999, 99999.99, 999999.0, 9.999999999999E10, 99999999999.99, 999, 'NR']
-    for column in data.columns:
-        data[column].replace(to_replace=extremes, value=np.NaN, inplace=True)
-
-    if Missing:
-        # Creation de colonnes de variables présentes/absentes
-        for colonne in data.columns:
-            values = data[colonne]
-            if None in values or pd.isna(values).any():
-                new_column_name = "Exists_" + str(colonne)
-                new_column = []
-                for i in range(len(data)):
-                    if values.iloc[i] == None or pd.isna(values.iloc[i]):
-                        new_column.append(0)
-                    else:
-                        new_column.append(1)
-                data.insert(0, new_column_name, new_column)
-
-    for colonne in data.columns:
-        data[colonne] = data[colonne].fillna(value=0)
-
-    Dav_Null = ["DAV_Null_INDIC_TIERS_CONTENTIEUX", "DAV_Null_INDIC_TIERS_NEIERTZ", "DAV_Null_INDIC_PERS_FICP",
-                "DAV_Null_PERS_SAISIE_ATTRIB",
-                "DAV_Null_INDIC_PERS_TUTELLE", "DAV_Null_INDIC_PERS_CURATELLE", "DAV_Null_INDIC_PERS_NEIERTZ",
-                "DAV_Null_INDIC_PERS_REDRST_JUDIC", "DAV_Null_INDIC_PERS_CONSTIT_STE",
-                "DAV_Null_INDIC_PERS_LIQUID_JUDIC"]
-    for column in Dav_Null:
-        if column in data.columns:
-            data[column].replace(['0', '1'], [0, 1], inplace=True)
-
-    return data
-
-
-def categorie_data_labels(data, data_val):
-    X = data.copy()
-    X_val = data_val.copy()
-    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
-                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
-    to_change = []
-    X_cat = []
-    X_val_cat = []
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X[column].replace(to_replace=0, value=" ", inplace=True)
-            X_val[column].replace(to_replace=0, value=" ", inplace=True)
-            enc = LabelEncoder()
-            X_val_cat.append(enc.transform(X_val[column]))
-            X_cat.append(enc.fit_transform(X[column]))
-
-    X_cat = pd.DataFrame(X_cat)
-    X_val_cat = pd.DataFrame(X_val_cat)
-
-    X_num = X.drop(to_change, axis=1)
-    X_val_num = X_val.drop(to_change, axis=1)
-    for column in X_num.columns:
-        col = X_num[column]
-        if col.dtypes not in ("int32", "float64"):
-            X_num[column] = col.astype(np.int32)
-            X_val_num[column] = col.astype(np.int32)
-
-    return pd.concat([X_num, X_cat], axis=1), pd.concat([X_val_num, X_val_cat], axis=1)
-
-
-def categorie_data_bin_train_test(data, data_val):
-    X = data.copy()
-    X_val = data_val.copy()
-    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
-                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
-    to_change = []
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X[column].replace(to_replace=0, value=" ", inplace=True)
-            X_val[column].replace(to_replace=0, value=" ", inplace=True)
-    enc = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
-    X_cat = enc.fit_transform(deepcopy(X[to_change]))
-    X_val_cat = enc.transform(deepcopy(X_val[to_change]))
-    labels_cat = enc.get_feature_names_out()
-
-    X_cat = pd.DataFrame(X_cat)
-    X_val_cat = pd.DataFrame(X_val_cat)
-
-    X_num = X.drop(to_change, axis=1)
-    col_num = X_num.columns
-    labels_num = []
-    for column in col_num:
-        labels_num.append(column)
-    X_val_num = X_val.drop(to_change, axis=1)
-
-    for column in X_num.columns:
-        col = X_num[column]
-        if col.dtypes not in ["int32", "float64"]:
-            X_num[column] = X_num[column].astype(np.int32)
-            X_val_num[column] = X_val_num[column].astype(np.int32)
-
-    # Need to reset the index for the concat to work well (when not same index)
-    X_cat = X_cat.reset_index(drop=True)
-    X_val_cat = X_val_cat.reset_index(drop=True)
-    X_num = X_num.reset_index(drop=True)
-    X_val_num = X_val_num.reset_index(drop=True)
-
-    X_train = pd.concat([X_num, X_cat], axis=1, ignore_index=True)
-    X_test = pd.concat([X_val_num, X_val_cat], axis=1, ignore_index=True)
-    labels = [*labels_num, *labels_cat]
-    return X_train, X_test, labels
-
-
-def categorie_data_bin_train(data):
-    """Traite les variables catégoriques des données en les binarisant
-    Retourne les données traitées, l'encodeur et les labels des colonnes
-
-        :param pandas.Dataframe data:
-            Data with some variables being categorical
-    """
-    X = data.copy()
-    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
-                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
-    to_change = []
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X[column].replace(to_replace=0, value=" ", inplace=True)
-    enc = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
-    X_cat = enc.fit_transform(X[to_change])
-    labels_cat = enc.get_feature_names_out()
-    X_cat = pd.DataFrame(X_cat)
-
-    X_num = X.drop(to_change, axis=1)
-    col_num = X_num.columns
-    labels_num = []
-    for column in col_num:
-        labels_num.append(column)
-
-    for column in X_num.columns:
-        col = X_num[column]
-        if col.dtypes not in ["int32", "float64"]:
-            X_num[column] = X_num[column].astype(np.int32)
-
-    # Need to reset the index for the concat to work well (when not same index)
-    X_cat = X_cat.reset_index(drop=True)
-    X_num = X_num.reset_index(drop=True)
-
-    X_train = pd.concat([X_num, X_cat], axis=1, ignore_index=True)
-    labels = [*labels_num, *labels_cat]
-    return X_train, labels, enc
-
-
-def categorie_data_bin_test(data_val, enc):
-    """Traite les variables catégoriques des données de test en les binarisant en utilisant l'encodeur utilisé pour binariser les données de train
-    Retourne les données traitées
-
-        :param pandas.Dataframe data_val:
-            Data with some variables being categorical
-        :param sklearn.preprocessing.OneHotEncoder enc:
-            OneHotEncoder fitted on the training data
-    """
-    X_val = data_val.copy()
-    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
-                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
-    to_change = []
-    for column in categorical:
-        if column in X_val.columns:
-            to_change.append(column)
-            X_val[column].replace(to_replace=0, value=" ", inplace=True)
-    X_val_cat = enc.transform(X_val[to_change])
-    X_val_cat = pd.DataFrame(X_val_cat)
-    X_val_num = X_val.drop(to_change, axis=1)
-
-    for column in X_val_num.columns:
-        col = X_val_num[column]
-        if col.dtypes not in ["int32", "float64"]:
-            X_val_num[column] = X_val_num[column].astype(np.int32)
-
-    # Need to reset the index for the concat to work well (when not same index)
-    X_val_cat = X_val_cat.reset_index(drop=True)
-    X_val_num = X_val_num.reset_index(drop=True)
-    X_test = pd.concat([X_val_num, X_val_cat], axis=1, ignore_index=True)
-    return X_test
-
-
-def traitement_train_val(X, X_val):
-    """Traite les données et les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant
-    Retourne les données traitées et les labels des colonnes
-
-        :param pandas.Dataframe data:
-            Data with some variables being categorical
-    """
-    X = extreme_values(X, Missing=False)
-    X_val = extreme_values(X_val, Missing=False)
-
-    X_train, X_test, labels = categorie_data_bin_train_test(X, X_val)
-
-    # Vérifie qu'on a bien les mêmes colonnes dans les données train / test
-    for column in X_train.columns:
-        if column not in X_test.columns:
-            X_train = X_train.drop(column, axis=1)
-    for column in X_test.columns:
-        if column not in X_train.columns:
-            X_test = X_test.drop(column, axis=1)
-
-    # Normalisation
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-    return X_train, X_test, labels
-
-
-def traitement_val(row, enc, scaler):
-    """Traite les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant
-    Retourne les données traitées
-        :param pandas.Dataframe data:
-            Data with some variables being categorical
-        :param sklearn.preprocessing.OneHotEncoder enc:
-            OneHotEncoder fitted on the training data
-        :param sklearn.preprocessing.StandardScaler scaler:
-            StandardScaler fitted on the training data
-    """
-    X_val = row.copy()
-    X_val = extreme_values(X_val, Missing=False)
-    X_val = categorie_data_bin_test(X_val, enc)
-    X_val = scaler.transform(X_val)
-    return X_val
-
-
-def traitement_train(data):
-    """Traite les données en gérant les valeurs extremes, les variables catégoriques et en normalisant
-    Retourne les données traitées, les labels des colonnes, l'encodeur pour les données catégoriques et le scaler
-
-        :param pandas.Dataframe data:
-            Data with some variables being categorical
-    """
-    X = data.copy()
-    X = extreme_values(X, Missing=False)
-    X, labels, enc = categorie_data_bin_train(X)
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
-    return X, labels, enc, scaler
-
-
-# # Courbe ROC score retail
-# data_score=pd.read_pickle("donnees Part/score_part_val.pkl")
-# y = data_score["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
-# y_proba=data_score["P_1"]
-# RocCurveDisplay.from_predictions(y, y_proba)
-# plt.title("Courbe ROC pour le retail")
-# plt.show()
-# plt.close()
 
 # table_val=["LK1ASASVIEW.score_agri_no_inc_val", "LK1ASASVIEW.score_agri_inc_val", "LK1ASASVIEW.score_asso_val", "LK1ASASVIEW.score_part_inc_val", "LK1ASASVIEW.score_pro_inc_val", "LK1ASASVIEW.score_pp_inc_val", "LK1ASASVIEW.score_pro_no_inc_val", "LK1ASASVIEW.score_part_no_inc_val", "LK1ASASVIEW.score_pp_no_inc_val"]
 # for table in table_val :
@@ -440,165 +84,182 @@ if __name__ == "__main__":
             "INDIC_PERS_INTERDIT_BANC", "Regroup_CSP_Initiale", "CAPACITE_JURIDIQUE", "Categ_NAF_Pro_Agri",
             "TOP_SEUIL_New_def", "DETTES_CT_DETTES_TOT_TIERS", "DETTES_TOT_FLUX_CRED_TIERS", "DETTES_TOT_FLUX_CRED_PRO",
             "NB_MOIS_CREATION_ENTREP", "segment"]
-    # 'segment"
+    # "segment"
 
     # # Sans la colonne qui donne le segment
     # data = pd.read_pickle("data_app.pkl")
     # data_val = pd.read_pickle("data_val.pkl")
 
     # # Avec la colonne qui donne le segment
-    data=pd.read_pickle("dataa_app200.pkl")
-    data_val=pd.read_pickle("dataa_val.pkl")
+    data = pd.read_pickle("dataa_app.pkl")
+    data_val = pd.read_pickle("dataa_val.pkl")
 
-    # X_train = pd.read_pickle("X_bin.pkl")
-    # X_test = pd.read_pickle("X_bin_val.pkl")
-    # labels = ['DAV_Null_EHB_DAV', 'DAV_Null_SLD_MOY_CREDITEUR_M', 'DAV_Null_SOLDE_MOYEN_FLUX_12M', 'DAV_Null_SOLDE_MOYEN_M', 'DAV_Null_SOLDE_MINIMUM_12M', 'DAV_Null_FLX_DBT_NBOPE_DEB_12', 'DAV_Null_MNT_REFUS_PAIEMENT_M', 'DAV_Null_MNT_REFUS_PAIEMT_12M', 'DAV_Null_NB_REFUS_PAIEMT_3M', 'DAV_Null_NB_REFUS_PAIEMT_6M', 'DAV_Null_NB_REFUS_PAIEMT_M', 'DAV_Null_NBPREL_ORG_FINANC_6M', 'DAV_Null_NB_TOT_JOURS_DEP_3M', 'DAV_Null_NB_TOT_JOURS_DEP_M', 'DAV_Null_NB_TOT_JOURS_DEP_12M','DAV_Null_NB_TOT_JOURS_DEP_6M', 'DAV_Null_NB_TOT_PMT_CARTE_12M', 'DAV_Null_NBTOT_JOURS_DEBIT_6M','DAV_Null_NB_OPE_DEBIT_12M', 'DAV_Null_NB_CARTES_DAV', 'DAV_Null_NBJOURS_DPS_DEPASS', 'DAV_Null_CPT_JOURS_CONS_DEP_M', 'INTERETS_DAV_FLUX', 'INTERETS_DEBIT_12M_TIERS', 'CRED_Null_MAXJOUR_CONS_RET_12M', 'CRED_Null_MNT_TOT_IMPAYE_CON', 'CRED_Null_NB_JOURS_MAX_RETARD', 'CRED_Null_NB_JOURS_CONS_RETARD', 'ENGAGEMENTS_HORS_BILAN_GR_Calc', 'EPARGNE_TOTALE','EPARGNE_LOGEMENT_GR', 'EPARGNE_LIVRET_GR', 'ENCOURS_RETARD_INF90', 'ENCOURS_RETARD_SUP90', 'ANCIEN_RELATION_G_RISQUE', 'INDIC_PERS_INTERDIT_BANC', 'TOP_SEUIL_New_def', 'DETTES_CT_DETTES_TOT_TIERS','DETTES_TOT_FLUX_CRED_TIERS', 'DETTES_TOT_FLUX_CRED_PRO', 'NB_MOIS_CREATION_ENTREP','Categ_NAF_Pro_Agri_Administratif', 'Categ_NAF_Pro_Agri_Agriculture','Categ_NAF_Pro_Agri_Aquaculture peche', 'Categ_NAF_Pro_Agri_Autre activite PRO', 'Categ_NAF_Pro_Agri_Banque assurance', 'Categ_NAF_Pro_Agri_Bovins et ruminant','Categ_NAF_Pro_Agri_Commerce', 'Categ_NAF_Pro_Agri_Construction', 'Categ_NAF_Pro_Agri_Culture céréales','Categ_NAF_Pro_Agri_Culture de la vigne', 'Categ_NAF_Pro_Agri_Culture et élevage','Categ_NAF_Pro_Agri_Divers', 'Categ_NAF_Pro_Agri_Energie', 'Categ_NAF_Pro_Agri_Etude', 'Categ_NAF_Pro_Agri_Forêt', 'Categ_NAF_Pro_Agri_Fruits et légumes', 'Categ_NAF_Pro_Agri_Immobilier', 'Categ_NAF_Pro_Agri_Industrie', 'Categ_NAF_Pro_Agri_Restauration', 'Categ_NAF_Pro_Agri_Santé','Categ_NAF_Pro_Agri_Social', 'Categ_NAF_Pro_Agri_Transport', 'Categ_NAF_Pro_Agri_Vaches laitières','Categ_NAF_Pro_Agri_Élevage de porcins', 'Categ_NAF_Pro_Agri_Élevage volailles','Regroup_CSP_Initiale_Agriculteur', 'Regroup_CSP_Initiale_Artisan', 'Regroup_CSP_Initiale_Cadre',"Regroup_CSP_Initiale_Chef d'entreprise", 'Regroup_CSP_Initiale_Chomeur','Regroup_CSP_Initiale_Commercant', 'Regroup_CSP_Initiale_Employes', 'Regroup_CSP_Initiale_Etudiant','Regroup_CSP_Initiale_Fonct pub armée', 'Regroup_CSP_Initiale_Prof intermediaire', 'Regroup_CSP_Initiale_Profession liberale', 'Regroup_CSP_Initiale_Retraite', 'Regroup_CSP_Initiale_Sans activite', 'CAPACITE_JURIDIQUE_01', 'CAPACITE_JURIDIQUE_02','CAPACITE_JURIDIQUE_03', 'CAPACITE_JURIDIQUE_04', 'CAPACITE_JURIDIQUE_05', 'CAPACITE_JURIDIQUE_06','CAPACITE_JURIDIQUE_07', 'CAPACITE_JURIDIQUE_08']
+    # X = data[Used + ["Defaut_12_Mois_contagion"]].copy()
+    # X["Defaut_12_Mois_contagion"] = X["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
+    # X = extreme_values(X, Missing=False)
+    # X, dico = green_clust(X, "Regroup_CSP_Initiale", "Defaut_12_Mois_contagion", 5)
+    # print(X["Regroup_CSP_Initiale"])
+    # print(dico)
 
-    # X_train = pd.read_pickle("X_binn.pkl")
-    # X_test = pd.read_pickle("X_binn_val.pkl")
-    # labels=['DAV_Null_EHB_DAV', 'DAV_Null_SLD_MOY_CREDITEUR_M', 'DAV_Null_SOLDE_MOYEN_FLUX_12M', 'DAV_Null_SOLDE_MOYEN_M', 'DAV_Null_SOLDE_MINIMUM_12M', 'DAV_Null_FLX_DBT_NBOPE_DEB_12', 'DAV_Null_MNT_REFUS_PAIEMENT_M', 'DAV_Null_MNT_REFUS_PAIEMT_12M', 'DAV_Null_NB_REFUS_PAIEMT_3M', 'DAV_Null_NB_REFUS_PAIEMT_6M', 'DAV_Null_NB_REFUS_PAIEMT_M', 'DAV_Null_NBPREL_ORG_FINANC_6M', 'DAV_Null_NB_TOT_JOURS_DEP_3M', 'DAV_Null_NB_TOT_JOURS_DEP_M', 'DAV_Null_NB_TOT_JOURS_DEP_12M', 'DAV_Null_NB_TOT_JOURS_DEP_6M', 'DAV_Null_NB_TOT_PMT_CARTE_12M', 'DAV_Null_NBTOT_JOURS_DEBIT_6M', 'DAV_Null_NB_OPE_DEBIT_12M', 'DAV_Null_NB_CARTES_DAV', 'DAV_Null_NBJOURS_DPS_DEPASS', 'DAV_Null_CPT_JOURS_CONS_DEP_M', 'INTERETS_DAV_FLUX', 'INTERETS_DEBIT_12M_TIERS', 'CRED_Null_MAXJOUR_CONS_RET_12M', 'CRED_Null_MNT_TOT_IMPAYE_CON', 'CRED_Null_NB_JOURS_MAX_RETARD', 'CRED_Null_NB_JOURS_CONS_RETARD', 'ENGAGEMENTS_HORS_BILAN_GR_Calc', 'EPARGNE_TOTALE', 'EPARGNE_LOGEMENT_GR', 'EPARGNE_LIVRET_GR', 'ENCOURS_RETARD_INF90', 'ENCOURS_RETARD_SUP90', 'ANCIEN_RELATION_G_RISQUE', 'INDIC_PERS_INTERDIT_BANC', 'TOP_SEUIL_New_def', 'DETTES_CT_DETTES_TOT_TIERS', 'DETTES_TOT_FLUX_CRED_TIERS', 'DETTES_TOT_FLUX_CRED_PRO', 'NB_MOIS_CREATION_ENTREP', 'Categ_NAF_Pro_Agri_Administratif', 'Categ_NAF_Pro_Agri_Agriculture', 'Categ_NAF_Pro_Agri_Aquaculture peche', 'Categ_NAF_Pro_Agri_Autre activite PRO', 'Categ_NAF_Pro_Agri_Banque assurance', 'Categ_NAF_Pro_Agri_Bovins et ruminant', 'Categ_NAF_Pro_Agri_Commerce', 'Categ_NAF_Pro_Agri_Construction', 'Categ_NAF_Pro_Agri_Culture céréales', 'Categ_NAF_Pro_Agri_Culture de la vigne', 'Categ_NAF_Pro_Agri_Culture et élevage', 'Categ_NAF_Pro_Agri_Divers', 'Categ_NAF_Pro_Agri_Energie', 'Categ_NAF_Pro_Agri_Etude', 'Categ_NAF_Pro_Agri_Forêt', 'Categ_NAF_Pro_Agri_Fruits et légumes', 'Categ_NAF_Pro_Agri_Immobilier', 'Categ_NAF_Pro_Agri_Industrie', 'Categ_NAF_Pro_Agri_Restauration', 'Categ_NAF_Pro_Agri_Santé', 'Categ_NAF_Pro_Agri_Social', 'Categ_NAF_Pro_Agri_Transport', 'Categ_NAF_Pro_Agri_Vaches laitières', 'Categ_NAF_Pro_Agri_Élevage de porcins', 'Categ_NAF_Pro_Agri_Élevage volailles', 'Regroup_CSP_Initiale_Agriculteur', 'Regroup_CSP_Initiale_Artisan', 'Regroup_CSP_Initiale_Cadre', "Regroup_CSP_Initiale_Chef d'entreprise", 'Regroup_CSP_Initiale_Chomeur', 'Regroup_CSP_Initiale_Commercant', 'Regroup_CSP_Initiale_Employes', 'Regroup_CSP_Initiale_Etudiant', 'Regroup_CSP_Initiale_Fonct pub armée', 'Regroup_CSP_Initiale_Prof intermediaire', 'Regroup_CSP_Initiale_Profession liberale', 'Regroup_CSP_Initiale_Retraite', 'Regroup_CSP_Initiale_Sans activite', 'CAPACITE_JURIDIQUE_01', 'CAPACITE_JURIDIQUE_02', 'CAPACITE_JURIDIQUE_03', 'CAPACITE_JURIDIQUE_04', 'CAPACITE_JURIDIQUE_05', 'CAPACITE_JURIDIQUE_06', 'CAPACITE_JURIDIQUE_07', 'CAPACITE_JURIDIQUE_08', 'segment_Agri_no_inc', 'segment_Asso', 'segment_Part_inc', 'segment_Part_no_inc', 'segment_Pp_inc', 'segment_Pp_no_inc', 'segment_Pro_inc', 'segment_Pro_no_inc']
-
-    X_train, labels, enc, scaler = traitement_train(data[Used])
+    X_train, labels, enc, scaler, merged_cat = traitement_train(data[Used + ["Defaut_12_Mois_contagion"]])
     print(X_train)
-    X_test = traitement_val(data_val[Used], enc, scaler)
+    print(X_train.shape)
+    X_test = traitement_val(data_val[Used + ["Defaut_12_Mois_contagion"]], enc, scaler, merged_cat)
+    print(X_test.shape)
 
     y = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
     y_train = y.astype(np.int32)
     y = data_val["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
     y_test = y.astype(np.int32)
 
-    # y_train = y_train[:10000]
-    # X_train = X_train[:10000]
+    # y_train = y_train[:20000]
+    # X_train = X_train[:20000]
 
-    # print("GlmTree SEM :")
-    # model = fit_parralized(X_train, y_train, criterion="gini", algo='SEM', nb_init=20, tree_depth=10, class_num=9, max_iter=100, min_impurity_decrease=0.0001, validation=True)
-    # tree.plot_tree(model.best_link, feature_names=labels)
-    # plt.show()
-    # plt.close()
-    # print(model.best_logreg)
+    print("GlmTree SEM :")
+    model = fit_parralized(X_train, y_train, criterion="gini", algo='SEM', nb_init=5, tree_depth=10, class_num=9,
+                           max_iter=100, min_impurity_decrease=0.0001, validation=True)
+    tree.plot_tree(model.best_link, feature_names=labels)
+    plt.show()
+    plt.close()
+    print(model.best_logreg)
+    print(model.best_logreg[0].coef_)
     # y_proba = model.predict_proba(X_train)
     # RocCurveDisplay.from_predictions(y_train, y_proba)
     # plt.title("Courbe ROC pour le Glmtree SEM sur le train")
     # plt.show()
     # plt.close()
 
+    # print("Régression logistique :")
+    # modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
+    #                                                 max_iter=100)
+    # modele_regLog.fit(X_train, y_train)
+    # proba = modele_regLog.predict_proba(X_train)
+    # y_proba = [proba[i][1] for i in range(len(proba))]
+    # RocCurveDisplay.from_predictions(y_train, y_proba)
+    # plt.title("Courbe ROC pour la régression logistique train")
+    # plt.show()
+    # plt.close()
 
-    print("Régression logistique :")
-    modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
-                                                    max_iter=100)
-    modele_regLog.fit(X_train, y_train)
-    proba = modele_regLog.predict_proba(X_train)
-    y_proba = [proba[i][1] for i in range(len(proba))]
-    RocCurveDisplay.from_predictions(y_train, y_proba)
-    plt.title("Courbe ROC pour la régression logistique train")
-    plt.show()
-    plt.close()
+    # print("Arbre de décision :")
+    # model_tree = DecisionTreeClassifier(min_samples_leaf=500, random_state=0)
+    # model_tree.fit(X_train, y_train)
+    # proba = model_tree.predict_proba(X_train)
+    # y_proba = [proba[i][1] for i in range(len(proba))]
+    # RocCurveDisplay.from_predictions(y_train, y_proba)
+    # plt.title("Courbe ROC pour l'arbre de décision")
+    # plt.show()
+    # plt.close()
 
-    print("Arbre de décision :")
-    model_tree = DecisionTreeClassifier(min_samples_leaf=500, random_state=0)
-    model_tree.fit(X_train, y_train)
-    proba = model_tree.predict_proba(X_train)
-    y_proba = [proba[i][1] for i in range(len(proba))]
-    RocCurveDisplay.from_predictions(y_train, y_proba)
-    plt.title("Courbe ROC pour l'arbre de décision")
-    plt.show()
-    plt.close()
+    # print("Gradient Boosting :")
+    # model_boost = GradientBoostingClassifier(min_samples_leaf=100, random_state=0)
+    # model_boost.fit(X_train, y_train)
+    # proba = model_boost.predict_proba(X_train)
+    # y_proba = [proba[i][1] for i in range(len(proba))]
+    # RocCurveDisplay.from_predictions(y_train, y_proba)
+    # plt.title("Courbe ROC pour Gradient Boosting")
+    # plt.show()
+    # plt.close()
 
-    print("Gradient Boosting :")
-    model_boost = GradientBoostingClassifier(min_samples_leaf=100, random_state=0)
-    model_boost.fit(X_train, y_train)
-    proba = model_boost.predict_proba(X_train)
-    y_proba = [proba[i][1] for i in range(len(proba))]
-    RocCurveDisplay.from_predictions(y_train, y_proba)
-    plt.title("Courbe ROC pour Gradient Boosting")
-    plt.show()
-    plt.close()
-
-    print("Random forest :")
-    model_forest = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
-    model_forest.fit(X_train, y_train)
-    proba = model_forest.predict_proba(X_train)
-    y_proba = [proba[i][1] for i in range(len(proba))]
-    RocCurveDisplay.from_predictions(y_train, y_proba)
-    plt.title("Courbe ROC pour Random Forest")
-    plt.show()
-    plt.close()
+    # print("Random forest :")
+    # model_forest = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
+    # model_forest.fit(X_train, y_train)
+    # proba = model_forest.predict_proba(X_train)
+    # y_proba = [proba[i][1] for i in range(len(proba))]
+    # RocCurveDisplay.from_predictions(y_train, y_proba)
+    # plt.title("Courbe ROC pour Random Forest")
+    # plt.show()
+    # plt.close()
 
     print("Totalité des données de validation")
-    table_val=["LK1ASASVIEW.agri_no_inc_val", "LK1ASASVIEW.agri_inc_val", "LK1ASASVIEW.asso_val", "LK1ASASVIEW.part_inc_val", "LK1ASASVIEW.part_no_inc_val", "LK1ASASVIEW.pp_inc_val", "LK1ASASVIEW.pp_no_inc_val", "LK1ASASVIEW.pro_inc_val", "LK1ASASVIEW.pro_no_inc_val"]
-    segment=["Agri_no_inc", "Agri_inc", "Asso", "Part_inc", "Part_no_inc", "Pp_inc", "Pp_no_inc", "Pro_inc", "Pro_no_inc"]
-    for i in range(len(table_val)) :
-        table=table_val[i]
+    table_val = ["LK1ASASVIEW.agri_no_inc_val", "LK1ASASVIEW.agri_inc_val", "LK1ASASVIEW.asso_val",
+                 "LK1ASASVIEW.part_inc_val", "LK1ASASVIEW.part_no_inc_val", "LK1ASASVIEW.pp_inc_val",
+                 "LK1ASASVIEW.pp_no_inc_val", "LK1ASASVIEW.pro_inc_val", "LK1ASASVIEW.pro_no_inc_val"]
+    segment = ["Agri_no_inc", "Agri_inc", "Asso", "Part_inc", "Part_no_inc", "Pp_inc", "Pp_no_inc", "Pro_inc",
+               "Pro_no_inc"]
+    for i in range(len(table_val)):
+        table = table_val[i]
         print(table)
-        # with vertica_python.connect(**conn_info) as connection:
-        #     cur = connection.cursor("list")
-        #     vdf = vDataFrame(table, cur)
-        #     y_proba = []
-        #     y_proba_reg = []
-        #     y_train = []
-        #     columns = Used + ["Defaut_12_Mois_contagion"]
-        #     data_val_part = vdf.iloc(limit=50000, columns=columns).to_pandas()
-        #     data_val_part["segment"] = segment[i]
-        #     X_test = traitement_val(data_val_part[Used], enc, scaler)
-        #     y_train = [*y_train, *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
-        #     y_proba = [*y_proba, *model.predict_proba(X_test)]
-
         with vertica_python.connect(**conn_info) as connection:
             cur = connection.cursor("list")
             vdf = vDataFrame(table, cur)
-            n = len(vdf)
-            k = 0
-            # y_proba = []
-            y_proba_reg = []
             y_train = []
-            y_proba_tree=[]
-            y_proba_boost=[]
-            y_proba_forest=[]
+            y_proba = []
+            # y_proba_reg = []
+            # y_proba_tree = []
+            # y_proba_boost = []
+            # y_proba_forest = []
+            columns = Used + ["Defaut_12_Mois_contagion"]
+            data_val_part = vdf.iloc(limit=50000, columns=columns).to_pandas()
+            data_val_part["segment"] = segment[i]
+            X_test = traitement_val(data_val_part[Used], enc, scaler, merged_cat)
+            y_train = [*y_train,
+                       *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
+            y_proba = [*y_proba, *model.predict_proba(X_test)]
+            # proba = modele_regLog.predict_proba(X_test)
+            # y_proba_reg = [*y_proba_reg, *[proba[i][1] for i in range(len(proba))]]
+            # proba = model_tree.predict_proba(X_test)
+            # y_proba_tree = [*y_proba_tree, *[proba[i][1] for i in range(len(proba))]]
+            # proba = model_boost.predict_proba(X_test)
+            # y_proba_boost = [*y_proba_boost, *[proba[i][1] for i in range(len(proba))]]
+            # proba = model_forest.predict_proba(X_test)
+            # y_proba_forest = [*y_proba_forest, *[proba[i][1] for i in range(len(proba))]]
 
-            while k + 10000 < n:
-                columns = Used + ["Defaut_12_Mois_contagion"]
-                data_val_part = vdf.iloc(limit=10000, offset=k, columns=columns).to_pandas()
-                data_val_part["segment"] = segment[i]
-                k = k + 10000
-                X_test = traitement_val(data_val_part[Used], enc, scaler)
-                y_train = [*y_train,
-                           *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
-                # y_proba = [*y_proba, *model.predict_proba(X_test)]
-                proba = modele_regLog.predict_proba(X_test)
-                y_proba_reg = [*y_proba_reg, *[proba[i][1] for i in range(len(proba))]]
-                proba = model_tree.predict_proba(X_test)
-                y_proba_tree = [*y_proba_tree, *[proba[i][1] for i in range(len(proba))]]
-                proba = model_boost.predict_proba(X_test)
-                y_proba_boost = [*y_proba_boost, *[proba[i][1] for i in range(len(proba))]]
-                proba = model_forest.predict_proba(X_test)
-                y_proba_forest = [*y_proba_forest, *[proba[i][1] for i in range(len(proba))]]
-
-        RocCurveDisplay.from_predictions(y_train, y_proba_reg)
-        plt.title("Courbe ROC reglog")
-        plt.show()
-        plt.close()
-        print("Reglog : ", roc_auc_score(y_train, y_proba_reg))
+        # with vertica_python.connect(**conn_info) as connection:
+        #     cur = connection.cursor("list")
+        #     vdf = vDataFrame(table, cur)
+        #     n = len(vdf)
+        #     k = 0
+        #     y_proba = []
+        #     y_proba_reg = []
+        #     y_train = []
+        #     y_proba_tree=[]
+        #     y_proba_boost=[]
+        #     y_proba_forest=[]
+        #
+        #     while k + 10000 < n:
+        #         columns = Used + ["Defaut_12_Mois_contagion"]
+        #         data_val_part = vdf.iloc(limit=10000, offset=k, columns=columns).to_pandas()
+        #         data_val_part["segment"] = segment[i]
+        #         k = k + 10000
+        #         X_test = traitement_val(data_val_part[Used], enc, scaler)
+        #         y_train = [*y_train,
+        #                    *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
+        #         y_proba = [*y_proba, *model.predict_proba(X_test)]
+        #         proba = modele_regLog.predict_proba(X_test)
+        #         y_proba_reg = [*y_proba_reg, *[proba[i][1] for i in range(len(proba))]]
+        #         proba = model_tree.predict_proba(X_test)
+        #         y_proba_tree = [*y_proba_tree, *[proba[i][1] for i in range(len(proba))]]
+        #         proba = model_boost.predict_proba(X_test)
+        #         y_proba_boost = [*y_proba_boost, *[proba[i][1] for i in range(len(proba))]]
+        #         proba = model_forest.predict_proba(X_test)
+        #         y_proba_forest = [*y_proba_forest, *[proba[i][1] for i in range(len(proba))]]
 
         # RocCurveDisplay.from_predictions(y_train, y_proba)
         # plt.title("Courbe ROC SEM")
         # plt.show()
         # plt.close()
-        # print("SEM : ", roc_auc_score(y_train, y_proba))
+        print("SEM : ", roc_auc_score(y_train, y_proba))
 
-        RocCurveDisplay.from_predictions(y_train, y_proba_tree)
-        plt.title("Courbe ROC Tree")
-        plt.show()
-        plt.close()
-        print("Tree : ", roc_auc_score(y_train, y_proba_tree))
+        # RocCurveDisplay.from_predictions(y_train, y_proba_reg)
+        # plt.title("Courbe ROC reglog")
+        # plt.show()
+        # plt.close()
+        # print("Reglog : ", roc_auc_score(y_train, y_proba_reg))
 
-        RocCurveDisplay.from_predictions(y_train, y_proba_boost)
-        plt.title("Courbe ROC Boost")
-        plt.show()
-        plt.close()
-        print("Boost : ", roc_auc_score(y_train, y_proba_boost))
+        # RocCurveDisplay.from_predictions(y_train, y_proba_tree)
+        # plt.title("Courbe ROC Tree")
+        # plt.show()
+        # plt.close()
+        # print("Tree : ", roc_auc_score(y_train, y_proba_tree))
 
-        RocCurveDisplay.from_predictions(y_train, y_proba_forest)
-        plt.title("Courbe ROC Forest")
-        plt.show()
-        plt.close()
-        print("Forest : ", roc_auc_score(y_train, y_proba_forest))
+        # RocCurveDisplay.from_predictions(y_train, y_proba_boost)
+        # plt.title("Courbe ROC Boost")
+        # plt.show()
+        # plt.close()
+        # print("Boost : ", roc_auc_score(y_train, y_proba_boost))
+
+        # RocCurveDisplay.from_predictions(y_train, y_proba_forest)
+        # plt.title("Courbe ROC Forest")
+        # plt.show()
+        # plt.close()
+        # print("Forest : ", roc_auc_score(y_train, y_proba_forest))

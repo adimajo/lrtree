@@ -5,7 +5,6 @@ import glmtree
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
-from copy import deepcopy
 from loguru import logger
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import roc_auc_score
@@ -191,7 +190,7 @@ def _vectorized_multinouilli(prob_matrix, items):
 
     s = prob_matrix.cumsum(axis=1)
     r = np.random.rand(prob_matrix.shape[0]).reshape((-1, 1))
-    k = (s < r).sum(axis=1)
+    k = np.sum((s < r), axis=1)
     return items[k]
 
 
@@ -237,17 +236,18 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
             models = {}
             for c_iter in range(self.class_num):
-                # If penalty ='l1', solver='liblinear' or 'saga', default ’lbfgs’
-                models[c_iter] = LogisticRegression(penalty='l2', C=1, tol=1e-4, warm_start=True)
+                # If penalty ='l1', solver='liblinear' or 'saga' (large datasets), default ’lbfgs’, C small leads to stronger regularization
+                models[c_iter] = LogisticRegression(penalty='l2', C=0.01, tol=1e-4, warm_start=True)
 
             # Start of main logic
             while i < self.max_iter and not Stop:
-                logregs_c_hat = np.array([])
-                logregs_c_map = np.array([])
-                model_c_map = np.array([])
+                logregs_c_hat = []
+                logregs_c_map = []
+                model_c_map = []
+                coeff_adaptive_c_map = []
                 predictions_log = np.zeros(shape=(self.n, df["c_hat"].nunique()))
 
-                # Getting p(y | x, c_hat) and filling the probs
+                # Getting p(y | x, c_hat) and filling the probabilites
                 for c_iter in range(df["c_hat"].nunique()):
                     idx = df["c_hat"] == np.sort(df["c_hat"].unique())[c_iter]
                     train_data = df[idx & df.index.isin(self.train_rows)]
@@ -262,7 +262,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         logreg = model.fit(X, y)
                         models[c_iter] = model
 
-                    logregs_c_hat = np.append(logregs_c_hat, deepcopy(logreg))
+                    logregs_c_hat.append(logreg)
                     to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1).to_numpy()
                     predictions_log[:, c_iter] = logreg.predict(to_predict)
 
@@ -276,15 +276,25 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     train_data = df[idx & df.index.isin(self.train_rows)]
                     y = train_data['y']
                     X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+
                     if y.nunique() == 1:
                         model = OneClassReg()
                         logreg = model.fit(X, y)
+                        coeff = [1 for i in range(len(X[0]))]
                     else:
-                        model = LogisticRegression(penalty='l2', C=1, tol=1e-4, warm_start=False)
+                        model_estim = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-4, warm_start=False)
+                        model_estim.fit(X, y)
+                        # Estimation of the coefficients, to use as (inverse of) weight in adaptive lasso
+                        coeff = model_estim.coef_[0]
+                        for b in range(len(X[0])):
+                            X[:, b] = X[:, b] / abs(coeff[b])
+                        # If penalty ='l1', solver='liblinear' or 'saga' (large datasets), default ’lbfgs’, C small leads to stronger regularization
+                        model = LogisticRegression(penalty='l1', solver='saga', C=0.01, tol=1e-4, warm_start=False)
                         logreg = model.fit(X, y)
 
-                    logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
-                    model_c_map = np.append(model_c_map, model)
+                    logregs_c_map.append(logreg)
+                    model_c_map.append(model)
+                    coeff_adaptive_c_map.append(coeff)
 
                 # Gettting the total criterion, for this model (tree + reg) proposition
                 self.criterion_iter[i] = calc_criterion(self, df, model_c_map)
@@ -301,6 +311,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         Stop = True
                         print("Stopped at iteration", i)
                     self.best_logreg = logregs_c_map
+                    self.best_coeff = coeff_adaptive_c_map
                     self.best_link = link
                     self.best_criterion = self.criterion_iter[i]
 
@@ -324,25 +335,33 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 if df["c_hat"].nunique() > 1:
                     X = df.drop(['y', 'c_map', 'c_hat'], axis=1)
                     X = X[df.index.isin(self.train_rows)].to_numpy()
-
+                    # Building the tree
                     clf = DecisionTreeClassifier(max_depth=tree_depth, min_impurity_decrease=min_impurity_decrease).fit(
                         X, df[df.index.isin(self.train_rows)]["c_hat"])
                     link = clf
-                    
+
                     if OptimalSize and self.validation:
                         X_validate = df.drop(['y', 'c_map', 'c_hat'], axis=1)
                         X_validate = X_validate[df.index.isin(self.validate_rows)]
                         path = clf.cost_complexity_pruning_path(X, df[df.index.isin(self.train_rows)]["c_hat"])
                         alphas = path.ccp_alphas
+
                         # Tree propositions, with more or less pruning
                         best_score = 0
-                        for alpha in alphas:
+                        a = 0
+                        Improving = True
+                        # Starts from the most complete tree, pruning while it improves the accuracy on the validation test
+                        while Improving and a < len(alphas):
+                            alpha = alphas[i]
                             tree = DecisionTreeClassifier(ccp_alpha=alpha)
                             tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
-                            score = tree.score(X_validate, df[df.index.isin(self.validate_rows)]["c_hat"])
+                            score = tree.score(X_validate.to_numpy(), df[df.index.isin(self.validate_rows)]["c_hat"])
                             # Choosing the tree with the best accuracy on the validation set
                             if score > best_score:
                                 link = tree
+                            # When pruning the tree starts to make us lose accuracy, we stop
+                            else:
+                                Improving = False
 
                 else:
                     logger.info("The tree has only its root! Premature end of algorithm.")
@@ -388,9 +407,9 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
             # MCMC steps
             while i < self.max_iter and not Stop:
-                logregs_c_hat = np.array([])
-                logregs_c_map = np.array([])
-                model_c_map = np.array([])
+                logregs_c_hat = []
+                logregs_c_map = []
+                model_c_map = []
                 predictions_log = np.zeros(shape=(self.n, self.class_num))
 
                 # Getting p(y | x, c_hat) and filling the probabilities/proportions
@@ -450,11 +469,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         model = LogisticRegression(penalty='l2', C=1, tol=1e-2, warm_start=False)
                         logreg = model.fit(X, y)
 
-                    logregs_c_map = np.append(logregs_c_map, deepcopy(logreg))
-                    model_c_map = np.append(model_c_map, model)
+                    logregs_c_map.append(logreg)
+                    model_c_map.append(model)
 
                 # Getting the total criterion
-                self.criterion_iter[i]  = calc_criterion(self, df, model_c_map)
+                self.criterion_iter[i] = calc_criterion(self, df, model_c_map)
                 # Best results
                 if self.criterion_iter[i] > self.best_criterion:
                     # Stopping when the criterion doesn't really get better anymore
@@ -533,7 +552,8 @@ def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max
                 Number of initial discretization intervals for all variables."""
     models = Parallel(n_jobs=nb_jobs)(
         delayed(fit_func)(X, y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
-                          class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease, OptimalSize=OptimalSize) for k
+                          class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease,
+                          OptimalSize=OptimalSize) for k
         in range(nb_init))
     critere = -np.inf
     best_model = None
