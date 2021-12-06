@@ -237,10 +237,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
             models = {}
             for c_iter in range(self.class_num):
                 # If penalty ='l1', solver='liblinear' or 'saga' (large datasets), default ’lbfgs’, C small leads to stronger regularization
-                models[c_iter] = LogisticRegression(penalty='l2', C=0.01, tol=1e-4, warm_start=True)
+                models[c_iter] = LogisticRegression(penalty='l2', C=0.1, tol=1e-2, warm_start=True)
 
             # Start of main logic
             while i < self.max_iter and not Stop:
+                print(i)
                 logregs_c_hat = []
                 logregs_c_map = []
                 model_c_map = []
@@ -280,21 +281,21 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     if y.nunique() == 1:
                         model = OneClassReg()
                         logreg = model.fit(X, y)
-                        coeff = [1 for i in range(len(X[0]))]
+                        # coeff = [1 for i in range(len(X[0]))]
                     else:
-                        model_estim = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-4, warm_start=False)
-                        model_estim.fit(X, y)
-                        # Estimation of the coefficients, to use as (inverse of) weight in adaptive lasso
-                        coeff = model_estim.coef_[0]
-                        for b in range(len(X[0])):
-                            X[:, b] = X[:, b] / abs(coeff[b])
+                        # model_estim = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-2, warm_start=False, max_iter=50)
+                        # model_estim.fit(X, y)
+                        # # Estimation of the coefficients, to use as (inverse of) weight in adaptive lasso
+                        # coeff = model_estim.coef_[0]
+                        # for b in range(len(X[0])):
+                        #     X[:, b] = X[:, b] / abs(coeff[b])
                         # If penalty ='l1', solver='liblinear' or 'saga' (large datasets), default ’lbfgs’, C small leads to stronger regularization
-                        model = LogisticRegression(penalty='l1', solver='saga', C=0.01, tol=1e-4, warm_start=False)
+                        model = LogisticRegression(penalty='l1', solver='saga', C=0.01, tol=1e-2, warm_start=False)
                         logreg = model.fit(X, y)
 
                     logregs_c_map.append(logreg)
                     model_c_map.append(model)
-                    coeff_adaptive_c_map.append(coeff)
+                    # coeff_adaptive_c_map.append(coeff)
 
                 # Gettting the total criterion, for this model (tree + reg) proposition
                 self.criterion_iter[i] = calc_criterion(self, df, model_c_map)
@@ -311,7 +312,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         Stop = True
                         print("Stopped at iteration", i)
                     self.best_logreg = logregs_c_map
-                    self.best_coeff = coeff_adaptive_c_map
+                    # self.best_coeff = coeff_adaptive_c_map
                     self.best_link = link
                     self.best_criterion = self.criterion_iter[i]
 
@@ -352,7 +353,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         Improving = True
                         # Starts from the most complete tree, pruning while it improves the accuracy on the validation test
                         while Improving and a < len(alphas):
-                            alpha = alphas[i]
+                            alpha = alphas[a]
                             tree = DecisionTreeClassifier(ccp_alpha=alpha)
                             tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
                             score = tree.score(X_validate.to_numpy(), df[df.index.isin(self.validate_rows)]["c_hat"])
@@ -362,6 +363,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                             # When pruning the tree starts to make us lose accuracy, we stop
                             else:
                                 Improving = False
+                            a = a + 1
 
                 else:
                     logger.info("The tree has only its root! Premature end of algorithm.")
