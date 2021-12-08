@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
+from math import log
 from copy import deepcopy
+from bisect import bisect_right
 from scipy.stats import chi2_contingency
 from pandas.core.common import flatten
 from sklearn import metrics
@@ -84,7 +86,7 @@ def extreme_values(data, Missing=False):
                 data.insert(0, new_column_name, new_column)
 
     for column in data.columns:
-        data.loc[:,column] = data[column].fillna(value=0)
+        data.loc[:, column] = data[column].fillna(value=0)
 
     Dav_Null = ["DAV_Null_INDIC_TIERS_CONTENTIEUX", "DAV_Null_INDIC_TIERS_NEIERTZ", "DAV_Null_INDIC_PERS_FICP",
                 "DAV_Null_PERS_SAISIE_ATTRIB",
@@ -209,27 +211,37 @@ def categorie_data_bin_train(data):
     for column in categorical:
         if column in X.columns:
             to_change.append(column)
-            X.loc[:,column] = X[column].astype(str)
+            X.loc[:, column] = X[column].astype(str)
             X, dico = regroupement(X, column, "Defaut_12_Mois_contagion")
             merged_cat[column] = dico
+
+    discret_cat={}
+    for column in X.columns:
+        if column not in categorical and column !="Defaut_12_Mois_contagion" :
+            to_change.append(column)
+            X.loc[:, column] = X[column].astype(np.float64)
+            X, binning = discretize_feature(X, column, "Defaut_12_Mois_contagion")
+            discret_cat[column]=binning
+
+    if "Defaut_12_Mois_contagion" in X.columns:
+        X.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
 
     enc = OneHotEncoder(sparse=False, handle_unknown='ignore')
     X_cat = enc.fit_transform(X[to_change])
     labels_cat = enc.get_feature_names_out()
     X_cat = pd.DataFrame(X_cat)
 
+    # Used when we had decided to keep the continuous numerical variables
     X_num = X.drop(to_change, axis=1)
-    if "Defaut_12_Mois_contagion" in X_num.columns:
-        X_num.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
     col_num = X_num.columns
     labels_num = []
     for column in col_num:
         labels_num.append(column)
-
+    # Making sure we have the right type for these variables
     for column in X_num.columns:
         col = X_num[column]
         if col.dtypes not in ["int32", "float64"]:
-            X_num.loc[:,column] = X_num[column].astype(np.int32)
+            X_num.loc[:, column] = X_num[column].astype(np.int32)
 
     # Need to reset the index for the concat to work well
     X_cat = X_cat.reset_index(drop=True)
@@ -237,10 +249,10 @@ def categorie_data_bin_train(data):
 
     X_train = pd.concat([X_num, X_cat], axis=1, ignore_index=True)
     labels = [*labels_num, *labels_cat]
-    return X_train, labels, enc, merged_cat
+    return X_train, labels, enc, merged_cat, discret_cat
 
 
-def categorie_data_bin_test(data_val, enc, merged_cat):
+def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
     """Traite les variables catégoriques des données de test en les binarisant en utilisant l'encodeur utilisé pour binariser les données de train
     Retourne les données traitées
 
@@ -260,17 +272,24 @@ def categorie_data_bin_test(data_val, enc, merged_cat):
     for column in categorical:
         if column in X_val.columns:
             to_change.append(column)
-            X_val.loc[:,column] = X_val[column].astype(str)
+            X_val.loc[:, column] = X_val[column].astype(str)
     # Merging the categories
     X_val.replace(merged_cat, inplace=True)
+
+    for column in X_val.columns:
+        if column not in categorical:
+            to_change.append(column)
+            X_val.loc[:, column] = X_val[column].astype(np.float64)
+            X_val = apply_discret(X_val, column, discret_cat[column])
+
     X_val_cat = enc.transform(X_val[to_change])
     X_val_cat = pd.DataFrame(X_val_cat)
-    X_val_num = X_val.drop(to_change, axis=1)
 
+    X_val_num = X_val.drop(to_change, axis=1)
     for column in X_val_num.columns:
         col = X_val_num[column]
         if col.dtypes not in ["int32", "float64"]:
-            X_val_num.loc[:,column] = X_val_num[column].astype(np.int32)
+            X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
 
     # Need to reset the index for the concat to work well (when not same index)
     X_val_cat = X_val_cat.reset_index(drop=True)
@@ -308,7 +327,7 @@ def traitement_train_val(X, X_val):
     return X_train, X_test, labels
 
 
-def traitement_val(data, enc, scaler, merged_cat):
+def traitement_val(data, enc, scaler, merged_cat, discret_cat):
     """Traite les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant
     Retourne les données traitées
         :param pandas.Dataframe data:
@@ -322,7 +341,7 @@ def traitement_val(data, enc, scaler, merged_cat):
     if "Defaut_12_Mois_contagion" in X_val.columns:
         X_val.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
     X_val = extreme_values(X_val, Missing=False)
-    X_val = categorie_data_bin_test(X_val, enc, merged_cat)
+    X_val = categorie_data_bin_test(X_val, enc, merged_cat, discret_cat)
     X_val = scaler.transform(X_val)
     return X_val
 
@@ -339,10 +358,10 @@ def traitement_train(data):
     if "Defaut_12_Mois_contagion" in X.columns:
         X["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)], inplace=True)
     X = extreme_values(X, Missing=False)
-    X, labels, enc, merged_cat = categorie_data_bin_train(X)
+    X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X)
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
-    return X, labels, enc, scaler, merged_cat
+    return X, labels, enc, scaler, merged_cat, discret_cat
 
 
 def green_clust(X, var, var_predite, num_clusters):
@@ -356,6 +375,7 @@ def green_clust(X, var, var_predite, num_clusters):
         :param int num_clusters:
             Number of modalities we want
      """
+
     def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
         # Matrix of the changes of chi2 for every pair grouped
         for count1, value1 in enumerate(labels):
@@ -436,7 +456,7 @@ def green_clust(X, var, var_predite, num_clusters):
         for ind in group:
             dico_regroupement[labels[ind]] = name_cluster
 
-    df.replace({var:dico_regroupement}, inplace=True)
+    df.replace({var: dico_regroupement}, inplace=True)
     return df, dico_regroupement
 
 
@@ -467,11 +487,6 @@ def regroupement(X, var, var_predite, seuil=0.05):
     while p_value > seuil:
         # Counts the number of 0/1 by modality
         freq_table = X_grouped.groupby([var, var_predite]).size().reset_index()
-        # Order by the mean of the predicted variable
-        modalities = np.unique(X_grouped[var])
-        for moda in modalities:
-            partial_table = freq_table.iloc[np.in1d(freq_table[var], moda)]
-
         # All the combinations of values
         liste_paires_modalities = list(itertools.combinations(np.unique(X_grouped[var]), 2))
         # Chi2 between the pairs
@@ -499,3 +514,143 @@ def regroupement(X, var, var_predite, seuil=0.05):
     print("Feature " + var + " went from ", len(initial_categories), " to ", len(new_categories), " modalities")
 
     return X_grouped, dico_regroupement
+
+
+def entropy(variable):
+    """Computes the entropy of the variable"""
+
+    def stable_log(input):
+        copy = input.copy()
+        copy[copy <= 1e-10] = 1
+        return np.log(copy)
+
+    # Proportion/probability of each unique value in variable
+    prob = np.unique(variable, return_counts=True)[1] / len(variable)
+    ent = -sum(prob * stable_log(prob))
+    return ent
+
+
+def stopping_criterion(cut_idx, target, ent):
+    """Decided whether we should cut target at cut_idx, knowing we imagine the new entropy to be"""
+    n = len(target)
+    target_entropy = entropy(target)
+    gain = target_entropy - ent
+
+    k = len(np.unique(target))
+    k1 = len(np.unique(target[: cut_idx]))
+    k2 = len(np.unique(target[cut_idx:]))
+
+    delta = (log(3 ** k - 2) - (k * target_entropy -
+                                k1 * entropy(target[: cut_idx]) -
+                                k2 * entropy(target[cut_idx:])))
+    cond = log(n - 1) / n + delta / n
+    if gain >= cond:
+        return gain
+    else:
+        return None
+
+
+def cut_points(x, y):
+    """Computes the cut values on x to minimize the entropy (on y)"""
+    xo = x
+    yo = y
+    depth = 1
+
+    def find_cut_index(x, y):
+        """Finds the best place to split x"""
+        n = len(y)
+        init_entropy = 999999
+        current_entropy = init_entropy
+        index = None
+        # We can't test every single value, it would take too long
+        step = max(1, n // 100)
+        for i in range(0, n - 1, step):
+            if x[i] != x[i + 1]:
+                cut = (x[i] + x[i + 1]) / 2.
+                # Return the index where to insert item cut in list x, assuming x is sorted
+                cutx = bisect_right(x, cut)
+                weight_cutx = cutx / n
+                left_entropy = weight_cutx * entropy(y[: cutx])
+                right_entropy = (1 - weight_cutx) * entropy(y[cutx:])
+                # New entropy with the separation
+                temp = left_entropy + right_entropy
+                if temp < current_entropy:
+                    current_entropy = temp
+                    index = i + 1
+        if index is not None:
+            return [index, current_entropy]
+        else:
+            return None
+
+    def getIndex(low, upp, depth=depth):
+        x = xo[low:upp]
+        y = yo[low:upp]
+        # Finds the best place to split, if we had to split
+        cut = find_cut_index(x, y)
+        if cut is None:
+            return None
+        cut_index = int(cut[0])
+        current_entropy = cut[1]
+        # Checks whether it is worth to split
+        ret = stopping_criterion(cut_index, np.array(y),
+                                 current_entropy)
+        if ret is not None:
+            return [cut_index, depth + 1]
+        else:
+            return None
+
+    def part(low=0, upp=len(xo) - 1, cut_points=np.array([]), depth=depth):
+        """Recursive function with returns the cuts_points"""
+        x = xo[low: upp]
+        if len(x) < 2:
+            return cut_points
+        cc = getIndex(low, upp, depth=depth)
+        if (cc is None):
+            return cut_points
+        ci = int(cc[0])
+        depth = int(cc[1])
+        cut_points = np.append(cut_points, low + ci)
+        cut_points = cut_points.astype(int)
+        cut_points.sort()
+        # We choose to have a maximum of 8 categories in total (2
+        if len(cut_points) > 2:
+            return cut_points
+        return (list(part(low, low + ci, cut_points, depth=depth)) +
+                list(part(low + ci + 1, upp, cut_points, depth=depth)))
+
+    res = part(depth=depth)
+    cut_value = []
+    if res is not None:
+        cut_index = res
+        for indices in cut_index:
+            # Gets the cut value from the cut index
+            cut_value.append((xo[indices - 1] + xo[indices]) / 2.0)
+    result = np.unique(cut_value)
+    return result
+
+
+def discretize_feature(X, var, var_predite):
+    """Discretizes the continuous variable X[var], using the target value var_predite
+    MDPL (Minimum Description Length Principle)"""
+    # Values at which to cut x
+    x = X[var].to_numpy()
+    x = x.copy()
+    binning = cut_points(X[var].to_numpy(), X[var_predite].to_numpy())
+
+    x_discrete = [1 for i in range(len(x))]
+    for i in range(len(x)):
+        for cut_value in binning:
+            if x[i] > cut_value:
+                x_discrete[i] = x_discrete[i] + 1
+    X[var] = x_discrete
+    return X, binning
+
+def apply_discret(X, var, binning):
+    x = X[var].to_numpy()
+    x_discrete = [1 for i in range(len(x))]
+    for i in range(len(x)):
+        for cut_value in binning:
+            if x[i] > cut_value:
+                x_discrete[i] = x_discrete[i] + 1
+    X[var] = x_discrete
+    return X

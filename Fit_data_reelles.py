@@ -1,11 +1,8 @@
 import numpy as np
 import glmtree
 import pandas as pd
-import tikzplotlib
-from pandas.core.common import flatten
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import RocCurveDisplay
 from sklearn.metrics import roc_auc_score
 from sklearn import metrics
@@ -15,9 +12,7 @@ from sklearn import tree
 from sklearn import linear_model
 import matplotlib.pyplot as plt
 from glmtree.fit import fit_parralized
-import time
 
-import vertica_python
 from verticapy.connect import *
 from verticapy import vDataFrame
 
@@ -97,14 +92,13 @@ if __name__ == "__main__":
     # X = data[Used + ["Defaut_12_Mois_contagion"]].copy()
     # X["Defaut_12_Mois_contagion"] = X["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
     # X = extreme_values(X, Missing=False)
-    # X, dico = green_clust(X, "Regroup_CSP_Initiale", "Defaut_12_Mois_contagion", 5)
-    # print(X["Regroup_CSP_Initiale"])
-    # print(dico)
+    # print(X["EPARGNE_TOTALE"].to_numpy()[:100])
+    # print(discretize_feature(X,"EPARGNE_TOTALE","Defaut_12_Mois_contagion")["EPARGNE_TOTALE"])
 
-    X_train, labels, enc, scaler, merged_cat = traitement_train(data[Used + ["Defaut_12_Mois_contagion"]])
+    X_train, labels, enc, scaler, merged_cat, discret_cat = traitement_train(data[Used + ["Defaut_12_Mois_contagion"]])
     print(X_train)
     print(X_train.shape)
-    X_test = traitement_val(data_val[Used + ["Defaut_12_Mois_contagion"]], enc, scaler, merged_cat)
+    X_test = traitement_val(data_val[Used + ["Defaut_12_Mois_contagion"]], enc, scaler, merged_cat, discret_cat)
     print(X_test.shape)
 
     y = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
@@ -116,18 +110,15 @@ if __name__ == "__main__":
     # X_train = X_train[:20000]
 
     print("GlmTree SEM :")
-    model = fit_parralized(X_train, y_train, criterion="gini", algo='SEM', nb_init=5, tree_depth=10, class_num=9,
+    model = fit_parralized(X_train, y_train, criterion="gini", algo='SEM', nb_init=4, tree_depth=10, class_num=9,
                            max_iter=100, min_impurity_decrease=0.0001, validation=True)
     tree.plot_tree(model.best_link, feature_names=labels)
     plt.show()
     plt.close()
     print(model.best_logreg)
-    print(model.best_logreg[0].coef_)
-    # y_proba = model.predict_proba(X_train)
-    # RocCurveDisplay.from_predictions(y_train, y_proba)
-    # plt.title("Courbe ROC pour le Glmtree SEM sur le train")
-    # plt.show()
-    # plt.close()
+    print([model.best_logreg[i].coef_ for i in range(len(model.best_logreg))])
+    y_proba = model.predict_proba(X_train)
+    print("SEM test : ", roc_auc_score(y_train, y_proba))
 
     # print("Régression logistique :")
     # modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
@@ -176,90 +167,83 @@ if __name__ == "__main__":
                  "LK1ASASVIEW.pp_no_inc_val", "LK1ASASVIEW.pro_inc_val", "LK1ASASVIEW.pro_no_inc_val"]
     segment = ["Agri_no_inc", "Agri_inc", "Asso", "Part_inc", "Part_no_inc", "Pp_inc", "Pp_no_inc", "Pro_inc",
                "Pro_no_inc"]
+
+    y_total_train=[]
+    y_total_proba=[]
+    # y_total_proba_reg = []
+    # y_total_proba_tree = []
+    # y_total_proba_boost = []
+    # y_total_proba_forest = []
+
     for i in range(len(table_val)):
         table = table_val[i]
         print(table)
-        with vertica_python.connect(**conn_info) as connection:
-            cur = connection.cursor("list")
-            vdf = vDataFrame(table, cur)
-            y_train = []
-            y_proba = []
-            # y_proba_reg = []
-            # y_proba_tree = []
-            # y_proba_boost = []
-            # y_proba_forest = []
-            columns = Used + ["Defaut_12_Mois_contagion"]
-            data_val_part = vdf.iloc(limit=50000, columns=columns).to_pandas()
-            data_val_part["segment"] = segment[i]
-            X_test = traitement_val(data_val_part[Used], enc, scaler, merged_cat)
-            y_train = [*y_train,
-                       *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
-            y_proba = [*y_proba, *model.predict_proba(X_test)]
-            # proba = modele_regLog.predict_proba(X_test)
-            # y_proba_reg = [*y_proba_reg, *[proba[i][1] for i in range(len(proba))]]
-            # proba = model_tree.predict_proba(X_test)
-            # y_proba_tree = [*y_proba_tree, *[proba[i][1] for i in range(len(proba))]]
-            # proba = model_boost.predict_proba(X_test)
-            # y_proba_boost = [*y_proba_boost, *[proba[i][1] for i in range(len(proba))]]
-            # proba = model_forest.predict_proba(X_test)
-            # y_proba_forest = [*y_proba_forest, *[proba[i][1] for i in range(len(proba))]]
-
         # with vertica_python.connect(**conn_info) as connection:
         #     cur = connection.cursor("list")
         #     vdf = vDataFrame(table, cur)
-        #     n = len(vdf)
-        #     k = 0
-        #     y_proba = []
-        #     y_proba_reg = []
         #     y_train = []
-        #     y_proba_tree=[]
-        #     y_proba_boost=[]
-        #     y_proba_forest=[]
-        #
-        #     while k + 10000 < n:
-        #         columns = Used + ["Defaut_12_Mois_contagion"]
-        #         data_val_part = vdf.iloc(limit=10000, offset=k, columns=columns).to_pandas()
-        #         data_val_part["segment"] = segment[i]
-        #         k = k + 10000
-        #         X_test = traitement_val(data_val_part[Used], enc, scaler)
-        #         y_train = [*y_train,
-        #                    *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
-        #         y_proba = [*y_proba, *model.predict_proba(X_test)]
-        #         proba = modele_regLog.predict_proba(X_test)
-        #         y_proba_reg = [*y_proba_reg, *[proba[i][1] for i in range(len(proba))]]
-        #         proba = model_tree.predict_proba(X_test)
-        #         y_proba_tree = [*y_proba_tree, *[proba[i][1] for i in range(len(proba))]]
-        #         proba = model_boost.predict_proba(X_test)
-        #         y_proba_boost = [*y_proba_boost, *[proba[i][1] for i in range(len(proba))]]
-        #         proba = model_forest.predict_proba(X_test)
-        #         y_proba_forest = [*y_proba_forest, *[proba[i][1] for i in range(len(proba))]]
+        #     y_proba = []
+        #     # y_proba_reg = []
+        #     # y_proba_tree = []
+        #     # y_proba_boost = []
+        #     # y_proba_forest = []
+        #     columns = Used + ["Defaut_12_Mois_contagion"]
+        #     data_val_part = vdf.iloc(limit=50000, columns=columns).to_pandas()
+        #     data_val_part["segment"] = segment[i]
+        #     X_test = traitement_val(data_val_part[Used], enc, scaler, merged_cat)
+        #     y_train = [*y_train,
+        #                *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
+        #     y_proba = [*y_proba, *model.predict_proba(X_test)]
+        #     # proba = modele_regLog.predict_proba(X_test)
+        #     # y_proba_reg = [*y_proba_reg, *[proba[i][1] for i in range(len(proba))]]
+        #     # proba = model_tree.predict_proba(X_test)
+        #     # y_proba_tree = [*y_proba_tree, *[proba[i][1] for i in range(len(proba))]]
+        #     # proba = model_boost.predict_proba(X_test)
+        #     # y_proba_boost = [*y_proba_boost, *[proba[i][1] for i in range(len(proba))]]
+        #     # proba = model_forest.predict_proba(X_test)
+        #     # y_proba_forest = [*y_proba_forest, *[proba[i][1] for i in range(len(proba))]]
 
-        # RocCurveDisplay.from_predictions(y_train, y_proba)
-        # plt.title("Courbe ROC SEM")
-        # plt.show()
-        # plt.close()
+        with vertica_python.connect(**conn_info) as connection:
+            cur = connection.cursor("list")
+            vdf = vDataFrame(table, cur)
+            n = len(vdf)
+            k = 0
+            y_proba = []
+            y_proba_reg = []
+            y_train = []
+            y_proba_tree=[]
+            y_proba_boost=[]
+            y_proba_forest=[]
+
+            while k + 10000 < n:
+                columns = Used + ["Defaut_12_Mois_contagion"]
+                data_val_part = vdf.iloc(limit=10000, offset=k, columns=columns).to_pandas()
+                data_val_part["segment"] = segment[i]
+                k = k + 10000
+                X_test = traitement_val(data_val_part[Used + ["Defaut_12_Mois_contagion"]], enc, scaler, merged_cat, discret_cat)
+                y_train = [*y_train,
+                           *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
+                y_proba = [*y_proba, *model.predict_proba(X_test)]
+                # proba = modele_regLog.predict_proba(X_test)
+                # y_proba_reg = [*y_proba_reg, *[proba[i][1] for i in range(len(proba))]]
+                # proba = model_tree.predict_proba(X_test)
+                # y_proba_tree = [*y_proba_tree, *[proba[i][1] for i in range(len(proba))]]
+                # proba = model_boost.predict_proba(X_test)
+                # y_proba_boost = [*y_proba_boost, *[proba[i][1] for i in range(len(proba))]]
+                # proba = model_forest.predict_proba(X_test)
+                # y_proba_forest = [*y_proba_forest, *[proba[i][1] for i in range(len(proba))]]
+
+        y_total_train=[*y_total_train, *y_train]
+        y_total_proba=[*y_total_proba, *y_proba]
+
         print("SEM : ", roc_auc_score(y_train, y_proba))
 
-        # RocCurveDisplay.from_predictions(y_train, y_proba_reg)
-        # plt.title("Courbe ROC reglog")
-        # plt.show()
-        # plt.close()
         # print("Reglog : ", roc_auc_score(y_train, y_proba_reg))
 
-        # RocCurveDisplay.from_predictions(y_train, y_proba_tree)
-        # plt.title("Courbe ROC Tree")
-        # plt.show()
-        # plt.close()
         # print("Tree : ", roc_auc_score(y_train, y_proba_tree))
 
-        # RocCurveDisplay.from_predictions(y_train, y_proba_boost)
-        # plt.title("Courbe ROC Boost")
-        # plt.show()
-        # plt.close()
         # print("Boost : ", roc_auc_score(y_train, y_proba_boost))
 
-        # RocCurveDisplay.from_predictions(y_train, y_proba_forest)
-        # plt.title("Courbe ROC Forest")
-        # plt.show()
-        # plt.close()
         # print("Forest : ", roc_auc_score(y_train, y_proba_forest))
+
+    print("SEM total : ", roc_auc_score(y_total_train, y_total_proba))

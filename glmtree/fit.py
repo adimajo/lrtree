@@ -360,9 +360,9 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                             # Choosing the tree with the best accuracy on the validation set
                             if score > best_score:
                                 link = tree
-                            # When pruning the tree starts to make us lose accuracy, we stop
-                            else:
-                                Improving = False
+                            # # When pruning the tree starts to make us lose accuracy, we stop
+                            # else:
+                            #     Improving = False
                             a = a + 1
 
                 else:
