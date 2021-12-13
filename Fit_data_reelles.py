@@ -1,15 +1,10 @@
-import numpy as np
-import glmtree
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.metrics import RocCurveDisplay
-from sklearn.metrics import roc_auc_score
-from sklearn import metrics
-from sklearn.tree import DecisionTreeClassifier
+# from sklearn.ensemble import RandomForestClassifier
+# from sklearn.ensemble import GradientBoostingClassifier
+# from sklearn import linear_model
+# from sklearn.tree import DecisionTreeClassifier
+
 from sklearn.metrics import roc_auc_score
 from sklearn import tree
-from sklearn import linear_model
 import matplotlib.pyplot as plt
 from glmtree.fit import fit_parralized
 
@@ -36,6 +31,8 @@ conn_info = {"host": "10.56.122.83",
              "connection_timeout": 100000}
 
 # table_val=["LK1ASASVIEW.score_agri_no_inc_val", "LK1ASASVIEW.score_agri_inc_val", "LK1ASASVIEW.score_asso_val", "LK1ASASVIEW.score_part_inc_val", "LK1ASASVIEW.score_pro_inc_val", "LK1ASASVIEW.score_pp_inc_val", "LK1ASASVIEW.score_pro_no_inc_val", "LK1ASASVIEW.score_part_no_inc_val", "LK1ASASVIEW.score_pp_no_inc_val"]
+# y_total_train=[]
+# y_total_proba=[]
 # for table in table_val :
 #     print(table)
 #     with vertica_python.connect(**conn_info) as connection:
@@ -59,7 +56,10 @@ conn_info = {"host": "10.56.122.83",
 #                     j=j+1
 #             y_proba=[*y_proba, *y_proba_part]
 #             y_train=[*y_train, *y_train_part]
+#     y_total_train = [*y_total_train, *y_train]
+#     y_total_proba = [*y_total_proba, *y_proba]
 #     print(roc_auc_score(y_train, y_proba))
+# print("ROC total", roc_auc_score(y_total_train, y_total_proba))
 
 
 if __name__ == "__main__":
@@ -89,12 +89,6 @@ if __name__ == "__main__":
     data = pd.read_pickle("dataa_app.pkl")
     data_val = pd.read_pickle("dataa_val.pkl")
 
-    # X = data[Used + ["Defaut_12_Mois_contagion"]].copy()
-    # X["Defaut_12_Mois_contagion"] = X["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
-    # X = extreme_values(X, Missing=False)
-    # print(X["EPARGNE_TOTALE"].to_numpy()[:100])
-    # print(discretize_feature(X,"EPARGNE_TOTALE","Defaut_12_Mois_contagion")["EPARGNE_TOTALE"])
-
     X_train, labels, enc, scaler, merged_cat, discret_cat = traitement_train(data[Used + ["Defaut_12_Mois_contagion"]])
     print(X_train)
     print(X_train.shape)
@@ -106,17 +100,17 @@ if __name__ == "__main__":
     y = data_val["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
     y_test = y.astype(np.int32)
 
-    # y_train = y_train[:20000]
-    # X_train = X_train[:20000]
 
     print("GlmTree SEM :")
     model = fit_parralized(X_train, y_train, criterion="gini", algo='SEM', nb_init=4, tree_depth=10, class_num=9,
                            max_iter=100, min_impurity_decrease=0.0001, validation=True)
+
     tree.plot_tree(model.best_link, feature_names=labels)
     plt.show()
     plt.close()
     print(model.best_logreg)
     print([model.best_logreg[i].coef_ for i in range(len(model.best_logreg))])
+
     y_proba = model.predict_proba(X_train)
     print("SEM test : ", roc_auc_score(y_train, y_proba))
 
@@ -126,40 +120,32 @@ if __name__ == "__main__":
     # modele_regLog.fit(X_train, y_train)
     # proba = modele_regLog.predict_proba(X_train)
     # y_proba = [proba[i][1] for i in range(len(proba))]
-    # RocCurveDisplay.from_predictions(y_train, y_proba)
-    # plt.title("Courbe ROC pour la régression logistique train")
-    # plt.show()
-    # plt.close()
-
+    # print("Reglog test : ", roc_auc_score(y_train, y_proba))
+    #
+    #
     # print("Arbre de décision :")
     # model_tree = DecisionTreeClassifier(min_samples_leaf=500, random_state=0)
     # model_tree.fit(X_train, y_train)
     # proba = model_tree.predict_proba(X_train)
     # y_proba = [proba[i][1] for i in range(len(proba))]
-    # RocCurveDisplay.from_predictions(y_train, y_proba)
-    # plt.title("Courbe ROC pour l'arbre de décision")
-    # plt.show()
-    # plt.close()
-
+    # print("Arbre test : ", roc_auc_score(y_train, y_proba))
+    #
+    #
     # print("Gradient Boosting :")
     # model_boost = GradientBoostingClassifier(min_samples_leaf=100, random_state=0)
     # model_boost.fit(X_train, y_train)
     # proba = model_boost.predict_proba(X_train)
     # y_proba = [proba[i][1] for i in range(len(proba))]
-    # RocCurveDisplay.from_predictions(y_train, y_proba)
-    # plt.title("Courbe ROC pour Gradient Boosting")
-    # plt.show()
-    # plt.close()
-
+    # print("GradBoost test : ", roc_auc_score(y_train, y_proba))
+    #
+    #
     # print("Random forest :")
     # model_forest = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
     # model_forest.fit(X_train, y_train)
     # proba = model_forest.predict_proba(X_train)
     # y_proba = [proba[i][1] for i in range(len(proba))]
-    # RocCurveDisplay.from_predictions(y_train, y_proba)
-    # plt.title("Courbe ROC pour Random Forest")
-    # plt.show()
-    # plt.close()
+    # print("Forest test : ", roc_auc_score(y_train, y_proba))
+
 
     print("Totalité des données de validation")
     table_val = ["LK1ASASVIEW.agri_no_inc_val", "LK1ASASVIEW.agri_inc_val", "LK1ASASVIEW.asso_val",
@@ -209,11 +195,11 @@ if __name__ == "__main__":
             n = len(vdf)
             k = 0
             y_proba = []
-            y_proba_reg = []
-            y_train = []
-            y_proba_tree=[]
-            y_proba_boost=[]
-            y_proba_forest=[]
+            # y_proba_reg = []
+            # y_train = []
+            # y_proba_tree=[]
+            # y_proba_boost=[]
+            # y_proba_forest=[]
 
             while k + 10000 < n:
                 columns = Used + ["Defaut_12_Mois_contagion"]
@@ -235,15 +221,19 @@ if __name__ == "__main__":
 
         y_total_train=[*y_total_train, *y_train]
         y_total_proba=[*y_total_proba, *y_proba]
+        # y_total_proba_reg=[*y_total_proba_reg, *y_proba_reg]
+        # y_total_proba_tree=[*y_total_proba_tree, *y_proba_tree]
+        # y_total_proba_boost=[*y_total_proba_boost, *y_proba_boost]
+        # y_total_proba_forest=[*y_total_proba_forest, *y_proba_forest]
 
         print("SEM : ", roc_auc_score(y_train, y_proba))
-
         # print("Reglog : ", roc_auc_score(y_train, y_proba_reg))
-
         # print("Tree : ", roc_auc_score(y_train, y_proba_tree))
-
         # print("Boost : ", roc_auc_score(y_train, y_proba_boost))
-
         # print("Forest : ", roc_auc_score(y_train, y_proba_forest))
 
     print("SEM total : ", roc_auc_score(y_total_train, y_total_proba))
+    # print("Reglog total : ", roc_auc_score(y_total_train, y_total_proba_reg))
+    # print("Tree total : ", roc_auc_score(y_total_train, y_total_proba_tree))
+    # print("Boost total : ", roc_auc_score(y_total_train, y_total_proba_boost))
+    # print("Forest total : ", roc_auc_score(y_total_train, y_total_proba_forest))

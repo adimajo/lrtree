@@ -16,6 +16,7 @@ class OneClassReg():
     def __init__(self, *args, **kwargs):
         self._single_class_label = None
         self.n_features_in_ = None
+        self.coef_=None
 
     def fit(self, X, y, sample_weight=None):
         self._single_class_label = y.iloc[0]
@@ -245,7 +246,6 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 logregs_c_hat = []
                 logregs_c_map = []
                 model_c_map = []
-                coeff_adaptive_c_map = []
                 predictions_log = np.zeros(shape=(self.n, df["c_hat"].nunique()))
 
                 # Getting p(y | x, c_hat) and filling the probabilites
@@ -281,21 +281,12 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     if y.nunique() == 1:
                         model = OneClassReg()
                         logreg = model.fit(X, y)
-                        # coeff = [1 for i in range(len(X[0]))]
                     else:
-                        # model_estim = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-2, warm_start=False, max_iter=50)
-                        # model_estim.fit(X, y)
-                        # # Estimation of the coefficients, to use as (inverse of) weight in adaptive lasso
-                        # coeff = model_estim.coef_[0]
-                        # for b in range(len(X[0])):
-                        #     X[:, b] = X[:, b] / abs(coeff[b])
-                        # If penalty ='l1', solver='liblinear' or 'saga' (large datasets), default ’lbfgs’, C small leads to stronger regularization
                         model = LogisticRegression(penalty='l1', solver='saga', C=0.01, tol=1e-2, warm_start=False)
                         logreg = model.fit(X, y)
 
                     logregs_c_map.append(logreg)
                     model_c_map.append(model)
-                    # coeff_adaptive_c_map.append(coeff)
 
                 # Gettting the total criterion, for this model (tree + reg) proposition
                 self.criterion_iter[i] = calc_criterion(self, df, model_c_map)
@@ -312,7 +303,6 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         Stop = True
                         print("Stopped at iteration", i)
                     self.best_logreg = logregs_c_map
-                    # self.best_coeff = coeff_adaptive_c_map
                     self.best_link = link
                     self.best_criterion = self.criterion_iter[i]
 
@@ -349,10 +339,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
                         # Tree propositions, with more or less pruning
                         best_score = 0
-                        a = 0
-                        Improving = True
                         # Starts from the most complete tree, pruning while it improves the accuracy on the validation test
-                        while Improving and a < len(alphas):
+                        for a in range(len(alphas)):
                             alpha = alphas[a]
                             tree = DecisionTreeClassifier(ccp_alpha=alpha)
                             tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
@@ -360,10 +348,6 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                             # Choosing the tree with the best accuracy on the validation set
                             if score > best_score:
                                 link = tree
-                            # # When pruning the tree starts to make us lose accuracy, we stop
-                            # else:
-                            #     Improving = False
-                            a = a + 1
 
                 else:
                     logger.info("The tree has only its root! Premature end of algorithm.")

@@ -18,7 +18,6 @@ def predict(self, X):
     # List of models for each class
     link = self.best_link
     logreg = self.best_logreg
-    # coeff = self.best_coeff
     # Predicted class for each sample
     classes = link.predict(X)
     liste_cla = np.unique(classes)
@@ -30,8 +29,6 @@ def predict(self, X):
     for i in range(len(liste_cla)):
         filtre = X_df["class"] == liste_cla[i]
         bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
-        # for m in range(len(bloc.iloc[0])):
-        #     bloc.iloc[:, m] = bloc.iloc[:, m] / abs(coeff[i][m])
         bloc_pred = logreg[i].predict(bloc.add_prefix("par_"))
         k = 0
         for j in range(len(X_df)):
@@ -54,7 +51,6 @@ def predict_proba(self, X):
     # List of models for each class
     link = self.best_link
     logreg = self.best_logreg
-    # coeff = self.best_coeff
     # Predicted class for each sample
     classes = link.predict(X)
     liste_cla = np.unique(classes)
@@ -66,8 +62,6 @@ def predict_proba(self, X):
     for i in range(len(liste_cla)):
         filtre = X_df["class"] == liste_cla[i]
         bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
-        # for m in range(len(bloc.iloc[0])):
-        #     bloc.iloc[:, m] = bloc.iloc[:, m] / abs(coeff[i][m])
         bloc_pred = logreg[i].predict_proba(bloc.add_prefix("par_"))
         k = 0
         for j in range(len(X_df)):

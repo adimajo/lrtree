@@ -1,11 +1,11 @@
-import glmtree
 from glmtree.data_test import generate_data
 from glmtree.fit import fit_parralized
-from joblib import Parallel, delayed
 from sklearn import tree
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
 import time
+
+# from joblib import Parallel, delayed
 
 # bon_critere1 = []
 # bon_critere2 = []

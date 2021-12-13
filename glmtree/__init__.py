@@ -196,7 +196,6 @@ class Glmtree:
         # Results
         self.best_link = []
         self.best_logreg = None
-        self.best_coeff = None
         self.best_criterion = -np.inf
         self.criterion_iter = []
 
