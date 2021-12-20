@@ -57,13 +57,13 @@ def clean_data(data):
     return data
 
 
-def extreme_values(data, Missing=False):
+def extreme_values(data, missing=False):
     """Deals with extreme values (ex : NaN, or not filled)
     Creates (or not) a column signaling which values were missing
 
         :param pandas.Dataframe data:
             Data to clean
-        :param Bool Missing:
+        :param Bool missing:
             Whether or not to create a column signaling missing values
     """
     # Valeurs extremes quand valeurs manquantes
@@ -71,7 +71,7 @@ def extreme_values(data, Missing=False):
     for column in data.columns:
         data[column].replace(to_replace=extremes, value=np.NaN, inplace=True)
 
-    if Missing:
+    if missing:
         # Creation de colonnes de variables présentes/absentes
         for column in data.columns:
             values = data[column]
@@ -79,7 +79,7 @@ def extreme_values(data, Missing=False):
                 new_column_name = "Exists_" + str(column)
                 new_column = []
                 for i in range(len(data)):
-                    if values.iloc[i] == None or pd.isna(values.iloc[i]):
+                    if values.iloc[i] is None or pd.isna(values.iloc[i]):
                         new_column.append(0)
                     else:
                         new_column.append(1)
@@ -215,13 +215,13 @@ def categorie_data_bin_train(data):
             X, dico = regroupement(X, column, "Defaut_12_Mois_contagion")
             merged_cat[column] = dico
 
-    discret_cat={}
+    discret_cat = {}
     for column in X.columns:
-        if column not in categorical and column !="Defaut_12_Mois_contagion" :
+        if column not in categorical and column != "Defaut_12_Mois_contagion":
             to_change.append(column)
             X.loc[:, column] = X[column].astype(np.float64)
             X, binning = discretize_feature(X, column, "Defaut_12_Mois_contagion")
-            discret_cat[column]=binning
+            discret_cat[column] = binning
 
     if "Defaut_12_Mois_contagion" in X.columns:
         X.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
@@ -253,13 +253,15 @@ def categorie_data_bin_train(data):
 
 
 def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
-    """Traite les variables catégoriques des données de test en les binarisant en utilisant l'encodeur utilisé pour binariser les données de train
+    """
+    Traite les variables catégoriques des données de test en les binarisant en utilisant l'encodeur utilisé pour
+    binariser les données de train
     Retourne les données traitées
 
-        :param pandas.Dataframe data_val:
-            Data with some variables being categorical
-        :param sklearn.preprocessing.OneHotEncoder enc:
-            OneHotEncoder fitted on the training data
+    :param pandas.Dataframe data_val:
+        Data with some variables being categorical
+    :param sklearn.preprocessing.OneHotEncoder enc:
+        OneHotEncoder fitted on the training data
     """
     X_val = data_val.copy()
     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
@@ -299,16 +301,18 @@ def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
 
 
 def traitement_train_val(X, X_val):
-    """Traite les données et les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant
+    """
+    Traite les données et les données de test en gérant les valeurs extremes, les variables catégoriques et en
+    normalisant
     Retourne les données traitées et les labels des colonnes
 
-        :param pandas.Dataframe X:
-            Data with some variables being categorical
-        :param pandas.Dataframe X_val:
-            Validation data with some variables being categorical
+    :param pandas.Dataframe X:
+        Data with some variables being categorical
+    :param pandas.Dataframe X_val:
+        Validation data with some variables being categorical
     """
-    X = extreme_values(X, Missing=False)
-    X_val = extreme_values(X_val, Missing=False)
+    X = extreme_values(X, missing=False)
+    X_val = extreme_values(X_val, missing=False)
 
     X_train, X_test, labels = categorie_data_bin_train_test(X, X_val)
 
@@ -340,7 +344,7 @@ def traitement_val(data, enc, scaler, merged_cat, discret_cat):
     X_val = data.copy()
     if "Defaut_12_Mois_contagion" in X_val.columns:
         X_val.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
-    X_val = extreme_values(X_val, Missing=False)
+    X_val = extreme_values(X_val, missing=False)
     X_val = categorie_data_bin_test(X_val, enc, merged_cat, discret_cat)
     X_val = scaler.transform(X_val)
     return X_val
@@ -357,7 +361,7 @@ def traitement_train(data):
     X = data.copy()
     if "Defaut_12_Mois_contagion" in X.columns:
         X["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)], inplace=True)
-    X = extreme_values(X, Missing=False)
+    X = extreme_values(X, missing=False)
     X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X)
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
@@ -415,7 +419,8 @@ def green_clust(X, var, var_predite, num_clusters):
     # Get the modalities
     labels = df[var].unique()
     clustered = df[var].copy()
-    # Square matrix (each line/column = a category), each cell represents the impact on chi2 if we merge the row & column categories
+    # Square matrix (each line/column = a category), each cell represents the impact on chi2 if we merge the row &
+    # column categories
     reductions = np.empty((len(labels), len(labels)))
     reductions[:] = np.NaN
     # List of index of categories merged to another category, then ignored in the reduction matrix
@@ -445,13 +450,11 @@ def green_clust(X, var, var_predite, num_clusters):
         clusters.remove(cluster2)
         clusters += [cluster1 + cluster2]
 
-    final_clusters = []
     dico_regroupement = {}
     for group in clusters:
         cluster = []
         for ind in group:
             cluster += [labels[ind]]
-        final_clusters += [cluster]
         name_cluster = ' - '.join(cluster)
         for ind in group:
             dico_regroupement[labels[ind]] = name_cluster
@@ -461,15 +464,17 @@ def green_clust(X, var, var_predite, num_clusters):
 
 
 def regroupement(X, var, var_predite, seuil=0.05):
-    """ Chi2 independence algorithm to group modalities
-        :param pandas.Dataframe X:
-            Data with some variables being categorical
-        :param str var:
-            Column for which we apply the algorithm
-        :param str var:
-            Column we aim to predict
-        :param float seuil:
-            Value for the p-value other which we merge modalities
+    """
+    Chi2 independence algorithm to group modalities
+
+    :param pandas.Dataframe X:
+        Data with some variables being categorical
+    :param str var:
+        Column for which we apply the algorithm
+    :param str var:
+        Column we aim to predict
+    :param float seuil:
+        Value for the p-value other which we merge modalities
      """
     X_grouped = X.copy()
 
@@ -500,7 +505,8 @@ def regroupement(X, var, var_predite, seuil=0.05):
                 np.in1d(X_grouped[var], liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])] = \
                 liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][0] + ' - ' + \
                 liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][1]
-            # print('Feature ' + var + ' - levels merged : ' + str(liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))]))
+            # print('Feature ' + var + ' - levels merged : ' + str(liste_paires_modalities[
+            # np.argmax(np.equal(liste_chi2, p_value))]))
         else:
             break
     new_categories = np.unique(X_grouped[var])
@@ -644,6 +650,7 @@ def discretize_feature(X, var, var_predite):
                 x_discrete[i] = x_discrete[i] + 1
     X[var] = x_discrete
     return X, binning
+
 
 def apply_discret(X, var, binning):
     x = X[var].to_numpy()

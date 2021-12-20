@@ -97,7 +97,8 @@ import time
 
 # X, y, theta, BIC_oracle = generate_data(10000, 3)
 # time0=time.time()
-# model = glmtree.Glmtree(algo='SEM', test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4, max_iter=100)
+# model = glmtree.Glmtree(algo='SEM', test=False, validation=False, criterion="aic", ratios=(0.7,), class_num=4,
+# max_iter=100)
 # model.fit(X, y, nb_init=5, tree_depth=2)
 # # model=fit_parralized(X, y, algo='SEM', nb_init=5, tree_depth=2, class_num=4)
 # time1=time.time()
@@ -105,15 +106,13 @@ import time
 # print(text_representation)
 # print(time1 - time0)
 
-
-
 X, y, theta, BIC_oracle = generate_data(10000, 3)
-X_test, y_test, _, _ =generate_data(10000, 3)
+X_test, y_test, _, _ = generate_data(10000, 3)
 
-time0=time.time()
-model=fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=10, tree_depth=2, class_num=4, max_iter=100)
-time1=time.time()
-print(time1-time0)
+time0 = time.time()
+model = fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=10, tree_depth=2, class_num=4, max_iter=100)
+time1 = time.time()
+print(time1 - time0)
 text_representation = tree.export_text(model.best_link)
 print(text_representation)
 models = model.best_logreg

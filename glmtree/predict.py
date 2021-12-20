@@ -1,5 +1,5 @@
 """
-Predict, predict_proba and precision methods for the Glmtree class
+predict, predict_proba and precision methods for the Glmtree class
 """
 import pandas as pd
 import numpy as np

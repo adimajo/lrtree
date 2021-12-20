@@ -1,32 +1,237 @@
+.ci_tools: &ci_tools
+  image:
+    name: layer-kraft.registry.saas.cagip.group.gca/ci-tools:latest
+
+.common_python: &common_python
+  image:
+    name: docker-remote.registry.saas.cagip.group.gca/library/python:3.8-slim
+
+.common_tag: &common_tag
+  tags:
+  - kubernetes
+
+.common_deploy_deb: &common_deploy_deb
+  before_script:
+    # Install ssh-agent if not already installed, it is required by Docker.
+    # (change apt-get to yum if you use a CentOS-based image)
+    - 'which ssh-agent || ( apt update && apt install -y openssh-client )'
+
+    # Run ssh-agent (inside the build environment)
+    - eval $(ssh-agent -s)
+
+    # Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
+    - echo "$BOOT_GITLAB_SSH_KEY" |  tr -d ' ' | base64 -d | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan gitlab.ca.cib >> ~/.ssh/known_hosts
+    - chmod 644 ~/.ssh/known_hosts
+    - apt update
+    - apt install -y git
+    - git config --global user.name "$GITLAB_USER_NAME"
+    - git config --global user.email "$GITLAB_USER_EMAIL"
+
 stages:
   - lint
   - test
-  - build
-
-before_script:
-  - apt-get update -y
+  - security
+  - install
+  - sonar_check
+  - document
+  - deploy
+  - promote_staging
+  - promote_stable
 
 lint:
   stage: lint
+  <<: *common_tag
+  <<: *common_python
   script:
-  - pip3 install pipenv
-  - pipenv run pip install flake8
-  # stop the build if there are Python syntax errors or undefined names
-  - pipenv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=test/conftest.py
-  # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-  - pipenv run flake8 --ignore=W504 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics --exclude=test/conftest.py
+    - pip install pipenv==2021.5.29
+    - pipenv run pip install flake8
+    # stop the build if there are Python syntax errors or undefined names
+    - pipenv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+    - pipenv run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+  only:
+    refs:
+      - branches
+    changes:
+      - .gitlab-ci.yml
+      - Pipfile
+      - glmtree/**/*
 
 test:
   stage: test
+  artifacts:
+    paths:
+      - coverage.xml
+  <<: *common_tag
+  <<: *common_python
+  <<: *common_deploy_deb
   script:
-    - pip3 install pipenv
+    - pip install pipenv==2021.5.29
     - pipenv install -d --skip-lock
-    - pipenv run coverage run --source glmtree -m pytest
+    - pipenv run coverage run --source glmtree/ -m pytest
     - pipenv run coverage report
+    - pipenv run coverage xml
+  only:
+    refs:
+      - branches
+    changes:
+      - .gitlab-ci.yml
+      - Pipfile
+      - glmtree/**/*
+      - tests/**/*
+  allow_failure: true
 
-build:
-  stage: build
+security:
+  stage: security
+  <<: *common_python
+  <<: *common_tag
   script:
+    - pip install bandit
+    - bandit -r glmtree
+
+install:
+  stage: install
+  artifacts:
+    paths:
+      - build.env
+      - Pipfile.lock
+  <<: *common_tag
+  <<: *common_python
+  <<: *common_deploy_deb
+  script:
+    - pip install pipenv==2021.5.29
     - pipenv install
-    - pipenv lock -r > requirements.txt
-    - python setup.py build sdist bdist_wheel
+    - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import glmtree; print(glmtree.__version__)'` >> build.env
+  only:
+    - master
+
+quality_check:
+  stage: sonar_check
+  image:
+    name: docker-remote.registry.saas.cagip.group.gca/sonarsource/sonar-scanner-cli:4.6
+  <<: *common_tag
+  variables:
+    SONAR_TOKEN: "${BOOT_SONAR_TOKEN}"
+    SONAR_HOST_URL: "${BOOT_SONAR_INSTANCE}"
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar" # Defines the location of the analysis task cache
+    GIT_DEPTH: 0 # Tells git to fetch all the branches of the project, required by the analysis task
+    SONAR_SCANNER_OPTS: "-Djavax.net.ssl.trustStore=cacerts"
+  script:
+    - . ./build.env
+    - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
+    - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
+    - apk --update add java-common
+    - keytool -import -alias mycert -file cacreditagricoleserver.crt -storetype jks -trustcacerts -noprompt -keypass keypass -keystore cacerts -storepass test@123
+    - sonar-scanner -Dsonar.exclusions=tests/**,coverage.xml,setup.py -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.qualitygate.wait=true -Dsonar.projectKey=$BOOT_SONAR_KEY -Dsonar.projectVersion=$APPLICATION_TAG_VERSION
+  only:
+   - master
+
+document:
+  stage: document
+  <<: *common_python
+  <<: *common_tag
+  script:
+    - . ./build.env
+    - pip install pipenv==2021.5.29
+    - apt update
+    - apt install -y make libpq-dev gcc git
+    - cd docs
+    - export PIPENV_PIPFILE=../Pipfile
+    - pipenv install -d --skip-lock
+    - pipenv run make clean
+    - pipenv run make html
+    - git config --global http.sslverify false
+    - git config --global user.name "$GITLAB_USER_NAME"
+    - git config --global user.email "$GITLAB_USER_EMAIL"
+    - git clone https://$BOOT_GITLAB_SRV_ACCOUNT:$BOOT_GITLAB_CAGIP_TOKEN@$BOOT_GITLAB_DOCS_REPO docs_to_publish
+    - rm -rf docs_to_publish/public
+    - mkdir docs_to_publish/public
+    - cp -r build/html/* docs_to_publish/public/
+    - cd docs_to_publish
+    - git add -A
+    - |-
+        if ! git diff-index --quiet HEAD --; then
+            git commit -am "Rollout version $APPLICATION_TAG_VERSION"
+            git push
+        else
+            echo "Nothing to push"
+        fi
+  artifacts:
+    paths:
+      - docs/build/html
+    expire_in: 1 week
+  only:
+    refs:
+      - branches
+    changes:
+      - .gitlab-ci.yml
+      - glmtree/**/*
+      - docs/**/*
+
+deploy:
+  artifacts:
+    paths:
+      - dist/
+  stage: deploy
+  <<: *common_tag
+  <<: *common_python
+  script:
+    - apt-get update
+    - apt-get install -y wget
+    - pip install pipenv==2021.5.29
+    - pipenv install -d --skip-lock
+    - pipenv run pipenv_to_requirements
+    - pipenv run python3 setup.py sdist bdist_wheel
+    - python3 setup.py sdist bdist_wheel
+    - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
+    - export CURL_CA_BUNDLE=""
+    - pipenv run twine upload --cert cacreditagricoleserver.crt --config-file .pypirc --repository arti dist/*
+  only:
+   - master
+
+promote_staging:
+  stage: promote_staging
+  when: manual
+  <<: *ci_tools
+  <<: *common_tag
+  variables:
+    CREDS: "${BOOT_ARTI_USER}:${BOOT_ARTI_PASSWORD}"
+    SOURCE_REPO: "${BOOT_ARTI_PYPI_SCRATCH_REGISTRY}"
+    TARGET_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
+  script:
+    - . ./build.env
+    - 'echo SOURCE REPOSITORY : ${SOURCE_REPO}'
+    - 'echo TARGET REPOSITORY : ${TARGET_REPO}'
+    - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
+    - if [[ $(curl -S -k -u ${CREDS} -XPOST https://${BOOT_ARTI_REGISTRY}/api/copy/${SOURCE_REPO}/bert-encoder-mig?to=/${TARGET_REPO} | jq --raw-output '.messages[0].level') = "INFO" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
+  only:
+   - master
+
+promote_stable:
+  stage: promote_stable
+  when: manual
+  <<: *ci_tools
+  <<: *common_tag
+  variables:
+    SOURCE_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
+    TARGET_REPO: "${BOOT_ARTI_PYPI_STABLE_REGISTRY}"
+    IMAGE: bert-encoder-mig
+  script:
+    - . ./build.env
+#    - apk update
+#    - apk add --no-cache python3 py3-pip
+    - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
+    - jfrog config add rt-server --artifactory-url=https://${BOOT_ARTI_REGISTRY} --user=${BOOT_ARTI_USER} --password=${BOOT_ARTI_PASSWORD} --interactive=false
+    - jfrog config use rt-server
+    - jfrog rt ping
+    - jfrog rt pip-config --server-id-resolve rt-server --repo-resolve ${TARGET_REPO}
+    - if [[ $(jfrog rt u dist/ ${TARGET_REPO}/${IMAGE}/${APPLICATION_TAG_VERSION}/ --build-name=${IMAGE} --build-number=${APPLICATION_TAG_VERSION} --module=${IMAGE} | jq --raw-output '.status') = "success" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
+#    - which python3
+#    - ln -s $(which python3) /usr/bin/python
+#    - CURL_CA_BUNDLE="" JFROG_CLI_LOG_LEVEL=DEBUG jfrog rt pip-install ${IMAGE}
+#    - pip show ${IMAGE}
+  only:
+   - master

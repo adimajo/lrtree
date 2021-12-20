@@ -1,5 +1,5 @@
 """
-fit method for the Glmtree class
+fit module for the Glmtree class
 """
 import glmtree
 import numpy as np
@@ -12,11 +12,11 @@ from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
 
 
-class OneClassReg():
+class OneClassReg:
     def __init__(self, *args, **kwargs):
         self._single_class_label = None
         self.n_features_in_ = None
-        self.coef_=None
+        self.coef_ = None
 
     def fit(self, X, y, sample_weight=None):
         self._single_class_label = y.iloc[0]
@@ -70,7 +70,8 @@ def _check_args(X, y):
 
 def _dataset_split(self):
     """
-    Splits the provided dataset into training, validation (to calculate the BIC, and choose the best model) and test sets
+    Splits the provided dataset into training, validation (to calculate the BIC, and choose the best model) and
+    test sets
     """
     fst_idx = int(self.ratios[0] * self.n)
     if self.validation and self.test:
@@ -88,11 +89,12 @@ def _dataset_split(self):
 def calc_criterion(self, df, model_c_map):
     """
     Computes the criterion for this model.
-        :param pandas.Dataframe df: The dataframe of the data used
-        :param list model_c_map: The list of the models for each leaf.
-        :returns: The criteria.
-        :rtype: float
-        """
+
+    :param pandas.Dataframe df: The dataframe of the data used
+    :param list model_c_map: The list of the models for each leaf.
+    :returns: The criteria.
+    :rtype: float
+    """
     criterion = 0
     if self.criterion == "gini":
         # Computing the Area Under Curve of the ROC curve, which we maximise
@@ -127,8 +129,8 @@ def calc_criterion(self, df, model_c_map):
                 X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
                 if X_validate.shape[0] > 0:
                     y_pred = model.predict_proba(X_validate.to_numpy())
-                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
-                                - model.n_features_in_
+                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) -\
+                        model.n_features_in_
                 k = k + 1
         else:
             k = 0
@@ -138,8 +140,8 @@ def calc_criterion(self, df, model_c_map):
                 y_true = df[idx & df.index.isin(self.train_rows)]["y"]
                 X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
                 y_pred = model.predict_proba(X_pred.to_numpy())
-                criterion = criterion - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) \
-                            - model.n_features_in_
+                criterion = criterion - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) -\
+                    model.n_features_in_
                 k = k + 1
 
     elif self.criterion == "bic":
@@ -153,8 +155,8 @@ def calc_criterion(self, df, model_c_map):
                 X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
                 if X_validate.shape[0] > 0:
                     y_pred = model.predict_proba(X_validate.to_numpy())
-                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) \
-                                - np.log(len(X_validate)) * model.n_features_in_
+                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) -\
+                        np.log(len(X_validate)) * model.n_features_in_
                 k = k + 1
         else:
             k = 0
@@ -167,7 +169,7 @@ def calc_criterion(self, df, model_c_map):
                 criterion = criterion - 2 * log_loss(y_true, y_pred,
                                                      normalize=False,
                                                      labels=[0, 1]) - \
-                            np.log(len(X_pred)) * model.n_features_in_
+                    np.log(len(X_pred)) * model.n_features_in_
                 k = k + 1
 
     return criterion
@@ -176,6 +178,7 @@ def calc_criterion(self, df, model_c_map):
 def _vectorized_multinouilli(prob_matrix, items):
     """
     A vectorized version of multinouilli sampling.
+
     :param prob_matrix: A probability matrix of size n (number of training
         examples) * m[j] (the factor levels to sample from).
     :type prob_matrix: numpy.array
@@ -196,25 +199,26 @@ def _vectorized_multinouilli(prob_matrix, items):
 
 
 def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, OptimalSize=True):
-    """Fits the Glmtree object.
+    """
+    Fits the Glmtree object.
 
-        :param numpy.ndarray X:
-            array_like of shape (n_samples, n_features)
-            Vector to be scored, where `n_samples` is the number of samples and
-            `n_features` is the number of features
-        :param numpy.ndarray y:
-            Boolean (0/1) labels of the observations. Must be of
-            the same length as X
-            (numpy "numeric" array).
-        :param int nb_init:
-            Number of different random initializations
-        :param int tree_depth:
-            Maximum depth of the tree used
-        :param float min_impurity_decrease:
-            Parameter used to split (or not) the decision Tree
-        :param bool OptimalSize:
-            Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
-        """
+    :param numpy.ndarray X:
+        array_like of shape (n_samples, n_features)
+        Vector to be scored, where `n_samples` is the number of samples and
+        `n_features` is the number of features
+    :param numpy.ndarray y:
+        Boolean (0/1) labels of the observations. Must be of
+        the same length as X
+        (numpy "numeric" array).
+    :param int nb_init:
+        Number of different random initializations
+    :param int tree_depth:
+        Maximum depth of the tree used
+    :param float min_impurity_decrease:
+        Parameter used to split (or not) the decision Tree
+    :param bool OptimalSize:
+        Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
+    """
     _check_args(X, y)
 
     self.n = len(y)
@@ -224,7 +228,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
     if self.algo == 'SEM':
         for k in range(nb_init):
             # Classification init
-            Stop = False
+            stopping_criterion = False
             i = 0
             X_copy = np.copy(X)
             link = []
@@ -237,11 +241,12 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
             models = {}
             for c_iter in range(self.class_num):
-                # If penalty ='l1', solver='liblinear' or 'saga' (large datasets), default ’lbfgs’, C small leads to stronger regularization
+                # If penalty ='l1', solver='liblinear' or 'saga' (large datasets),
+                # default ’lbfgs’, C small leads to stronger regularization
                 models[c_iter] = LogisticRegression(penalty='l2', C=0.1, tol=1e-2, warm_start=True)
 
             # Start of main logic
-            while i < self.max_iter and not Stop:
+            while i < self.max_iter and not stopping_criterion:
                 print(i)
                 logregs_c_hat = []
                 logregs_c_map = []
@@ -296,11 +301,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     # Stopping when the criterion doesn't really get better anymore
                     if self.criterion == "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.005:
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
                     if self.criterion != "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.01 * abs(self.best_criterion):
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
                     self.best_logreg = logregs_c_map
                     self.best_link = link
@@ -308,7 +313,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
                 # Stopping when we reach a tree with only one leaf
                 if i > 0 and link == []:
-                    Stop = True
+                    stopping_criterion = True
                     print("Stopped at iteration", i, "the model is juste a logistic regression with no tree.")
 
                 # Stopping when the criterion doesn't vary anymore
@@ -316,10 +321,10 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     last_ones = self.criterion_iter[-10: -1]
                     variation = np.var(last_ones) ** 0.5
                     if self.criterion == "gini" and variation < 0.005:
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
                     if self.criterion != "gini" and variation < 0.01 * abs(self.best_criterion):
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
 
                 # Getting p(c_hat | x)
@@ -339,7 +344,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
                         # Tree propositions, with more or less pruning
                         best_score = 0
-                        # Starts from the most complete tree, pruning while it improves the accuracy on the validation test
+                        # Starts from the most complete tree, pruning while it improves the accuracy on the
+                        # validation test
                         for a in range(len(alphas)):
                             alpha = alphas[a]
                             tree = DecisionTreeClassifier(ccp_alpha=alpha)
@@ -356,8 +362,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 # Choice of the new c_hat = random step
                 X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
                 y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
-                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) \
-                                         + np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
+                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) +\
+                    np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
                 matrix = np.multiply(link.predict_proba(X), masked_predictions_log)
                 row_sums = matrix.sum(axis=1)
                 p = matrix / row_sums[:, np.newaxis]
@@ -369,11 +375,10 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
                 i = i + 1
 
-
     elif self.algo == 'EM':
         for k in range(nb_init):
             # Random initialisation
-            Stop = False
+            stopping_criterion = False
             i = 0
             X_copy = np.copy(X)
             self.criterion_iter = []
@@ -392,7 +397,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 models[c_iter] = LogisticRegression(penalty='l2', C=1, tol=1e-2, warm_start=True)
 
             # MCMC steps
-            while i < self.max_iter and not Stop:
+            while i < self.max_iter and not stopping_criterion:
                 logregs_c_hat = []
                 logregs_c_map = []
                 model_c_map = []
@@ -430,8 +435,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 # New matric of proportions p_theta_1|x
                 y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
                 # p_theta_y|x
-                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) \
-                                         + np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
+                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) +\
+                    np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
                 # p_beta_c|x * p_theta_y|x
                 matrix = np.multiply(link.predict_proba(X), masked_predictions_log)
                 row_sums = matrix.sum(axis=1)
@@ -465,11 +470,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     # Stopping when the criterion doesn't really get better anymore
                     if self.criterion == "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.005:
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
                     if self.criterion != "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.01 * abs(self.best_criterion):
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
 
                     self.best_logreg = logregs_c_map
@@ -481,10 +486,10 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     last_ones = self.criterion_iter[-10: -1]
                     variation = np.var(last_ones) ** 0.5
                     if self.criterion == "gini" and variation < 0.005:
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
                     if self.criterion != "gini" and variation < 0.01 * abs(self.best_criterion):
-                        Stop = True
+                        stopping_criterion = True
                         print("Stopped at iteration", i)
 
                 i = i + 1
