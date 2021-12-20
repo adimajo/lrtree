@@ -126,6 +126,7 @@ class Glmtree:
     .. attribute:: best_reglog:
         The best logistic regression on quantized data found with best_link.
         :type: statsmodels.formula.api.glm
+    .. todo: on n'utilise plus statsmodels?
     .. attribute:: ratios
         The line rows corresponding to the splits.
         :type: tuple
