@@ -496,8 +496,15 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
 
 def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, class_num=10, validation=False,
-             min_impurity_decrease=0.0, OptimalSize=True):
-    """Creates the glmtree model and fits it to the data
+             min_impurity_decrease=0.0, optimal_size=True):
+    """
+    Creates the glmtree model and fits it to the data
+
+            :param str algo:
+            :param str criterion:
+            :param float min_impurity_decrease:
+            :param bool validation:
+            :param bool optimal_size:
             :param numpy.ndarray X:
                 array_like of shape (n_samples, n_features)
                 Vector to be scored, where `n_samples` is the number of samples and
@@ -514,14 +521,23 @@ def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, clas
                 Number of initial discretization intervals for all variables."""
     model = glmtree.Glmtree(algo=algo, test=False, validation=validation, criterion=criterion, ratios=(0.7,),
                             class_num=class_num, max_iter=max_iter)
-    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, OptimalSize=OptimalSize)
+    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, OptimalSize=optimal_size)
     return model
 
 
 def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10,
-                   min_impurity_decrease=0.0, OptimalSize=True,
+                   min_impurity_decrease=0.0, optimal_size=True,
                    validation=False):
     """A fit function which creates tge model and fits it, where the random initilisations are parallized
+            :param str algo:
+            :param str criterion:
+            :param float min_impurity_decrease:
+            :param bool validation:
+            :param bool optimal_size:
+            :param numpy.ndarray X:
+                array_like of shape (n_samples, n_features)
+                Vector to be scored, where `n_samples` is the number of samples and
+                `n_features` is the number of features
             :param numpy.ndarray X:
                 array_like of shape (n_samples, n_features)
                 Vector to be scored, where `n_samples` is the number of samples and
@@ -540,11 +556,12 @@ def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max
             :param int tree_depth:
                 Maximum depth of the tree used
             :param int class_num:
-                Number of initial discretization intervals for all variables."""
+                Number of initial discretization intervals for all variables.
+            """
     models = Parallel(n_jobs=nb_jobs)(
         delayed(fit_func)(X, y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
                           class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease,
-                          OptimalSize=OptimalSize) for k
+                          OptimalSize=optimal_size) for _
         in range(nb_init))
     critere = -np.inf
     best_model = None
