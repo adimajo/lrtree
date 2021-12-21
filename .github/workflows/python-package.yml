@@ -42,7 +42,7 @@ jobs:
     - name: Test security
       run: |
         pipenv run pip install bandit
-        bandit -r glmtree
+        pipenv run bandit -r glmtree
     - name: Document
       run: |
         cd docs
