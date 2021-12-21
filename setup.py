@@ -32,8 +32,7 @@ setup(name='glmtree',
       author='Adrien Ehrhardt, Dmitry Gaynullin',
       author_email='adrien.ehrhardt@credit-agricole-sa.fr',
       install_requires=install_requires,
-      classifiers=(
+      classifiers=[
           "Programming Language :: Python :: 3",
           "Operating System :: OS Independent",
-      ),
-      )
+      ])
