@@ -82,7 +82,6 @@ test:
       - Pipfile
       - glmtree/**/*
       - tests/**/*
-  allow_failure: true
 
 security:
   stage: security

@@ -133,7 +133,7 @@ def categorie_data_labels(data, data_val):
 
     for column in X_num.columns:
         col = X_num[column]
-        if col.dtypes not in ("int32", "float64"):
+        if col.dtypes not in ("int32", "int64", "float32", "float64"):
             X_num[column] = col.astype(np.int32)
             X_val_num[column] = col.astype(np.int32)
 
@@ -176,7 +176,7 @@ def categorie_data_bin_train_test(data, data_val):
 
     for column in X_num.columns:
         col = X_num[column]
-        if col.dtypes not in ["int32", "float64"]:
+        if col.dtypes not in ["int32", "int64", "float32", "float64"]:
             X_num[column] = X_num[column].astype(np.int32)
             X_val_num[column] = X_val_num[column].astype(np.int32)
 
@@ -240,7 +240,7 @@ def categorie_data_bin_train(data):
     # Making sure we have the right type for these variables
     for column in X_num.columns:
         col = X_num[column]
-        if col.dtypes not in ["int32", "float64"]:
+        if col.dtypes not in ("int32", "int64", "float32", "float64"):
             X_num.loc[:, column] = X_num[column].astype(np.int32)
 
     # Need to reset the index for the concat to work well
@@ -290,7 +290,7 @@ def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
     X_val_num = X_val.drop(to_change, axis=1)
     for column in X_val_num.columns:
         col = X_val_num[column]
-        if col.dtypes not in ["int32", "float64"]:
+        if col.dtypes not in ("int32", "int64", "float32", "float64"):
             X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
 
     # Need to reset the index for the concat to work well (when not same index)
