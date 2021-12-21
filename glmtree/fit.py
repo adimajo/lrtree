@@ -44,19 +44,18 @@ def _check_args(X, y):
         logger.error(msg)
         raise ValueError(msg)
     if 'numpy' in str(type(X)):
-        types_data = [i.dtype in ("int32", "float64") for i in X]
+        types_data = [i.dtype in ("int32", "int64", "float32", "float64") for i in X]
     else:
-        types_data = [X[i].dtype in ("int32", "float64") for i in X.columns]
+        types_data = [X[i].dtype in ("int32", "int64", "float32", "float64") for i in X.columns]
     if sum(types_data) != len(types_data):
         msg = "Unsupported data types. Columns of X must be int or float."
         logger.error(msg)
         raise ValueError(msg)
 
     if 'numpy' in str(type(y)):
-        types_data = [i.dtype in ("int32", "float64") for i in y]
+        types_data = [i.dtype in ("int32", "int64", "float32", "float64") for i in y]
     else:
-        types_data = [y.dtype in ("int32", "float64")]
-    # types_data = [i.dtype in ("int32", "float64") for i in y]
+        types_data = [y.dtype in ("int32", "int64", "float32", "float64")]
     if sum(types_data) != len(types_data):
         msg = "Unsupported data types. Columns of y must be int or float."
         logger.error(msg)
