@@ -78,7 +78,7 @@ intersphinx_mapping = {
     'matplotlib': ('https://matplotlib.org/', None),
     'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
     'joblib': ('https://joblib.readthedocs.io/en/latest', None),
-    'sklearn': ('http://scikit-learn.org/stable',
+    'sklearn': ('https://scikit-learn.org/stable',
                 (None, './_intersphinx/sklearn-objects.inv'))
 }
 

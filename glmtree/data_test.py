@@ -1,7 +1,8 @@
-import numpy as np
 """
 data_test module for the Glmtree class: generating some data to test the algorithm on.
 """
+import numpy as np
+
 
 def generate_data(n, d, theta=None):
     """

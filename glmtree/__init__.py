@@ -10,7 +10,7 @@
     Glmtree.generate_data
     NotFittedError
 """
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 import numpy as np
 from loguru import logger
@@ -126,6 +126,7 @@ class Glmtree:
     .. attribute:: best_reglog:
         The best logistic regression on quantized data found with best_link.
         :type: statsmodels.formula.api.glm
+    .. todo: on n'utilise plus statsmodels?
     .. attribute:: ratios
         The line rows corresponding to the splits.
         :type: tuple
@@ -141,6 +142,7 @@ class Glmtree:
                  max_iter: int = 100):
         """
         Initializes self by checking if its arguments are appropriately specified.
+
             :param str algo:        The algorithm to be used to fit the Glmtree: "SEM" for a stochastic approach or
                                     "EM" for a non stochastic expectation/maximization algorithm.
             :param bool test:       Boolean specifying if a test set is required.
