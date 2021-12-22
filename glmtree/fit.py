@@ -238,7 +238,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
             models = {}
             for c_iter in range(self.class_num):
                 # If penalty ='l1', solver='liblinear' or 'saga' (large datasets), default ’lbfgs’, C small leads to stronger regularization
-                models[c_iter] = LogisticRegression(penalty='l2', C=0.1, tol=1e-2, warm_start=True)
+                models[c_iter] = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-2, warm_start=True)
 
             # Start of main logic
             while i < self.max_iter and not Stop:

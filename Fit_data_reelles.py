@@ -102,17 +102,17 @@ if __name__ == "__main__":
 
 
     print("GlmTree SEM :")
-    model = fit_parralized(X_train, y_train, criterion="gini", algo='SEM', nb_init=4, tree_depth=10, class_num=9,
+    model = fit_parralized(X_train, y_train, criterion="gini", algo='SEM', nb_init=4, tree_depth=10, class_num=4,
                            max_iter=100, min_impurity_decrease=0.0001, validation=True)
 
-    tree.plot_tree(model.best_link, feature_names=labels)
-    plt.show()
-    plt.close()
+    # tree.plot_tree(model.best_link, feature_names=labels)
+    # plt.show()
+    # plt.close()
     print(model.best_logreg)
     print([model.best_logreg[i].coef_ for i in range(len(model.best_logreg))])
 
-    y_proba = model.predict_proba(X_train)
-    print("SEM test : ", roc_auc_score(y_train, y_proba))
+    # y_proba = model.predict_proba(X_train)
+    # print("SEM test : ", roc_auc_score(y_train, y_proba))
 
     # print("Régression logistique :")
     # modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
@@ -176,7 +176,7 @@ if __name__ == "__main__":
         #     columns = Used + ["Defaut_12_Mois_contagion"]
         #     data_val_part = vdf.iloc(limit=50000, columns=columns).to_pandas()
         #     data_val_part["segment"] = segment[i]
-        #     X_test = traitement_val(data_val_part[Used], enc, scaler, merged_cat)
+        #     X_test = traitement_val(data_val_part[Used + ["Defaut_12_Mois_contagion"]], enc, scaler, merged_cat, discret_cat)
         #     y_train = [*y_train,
         #                *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
         #     y_proba = [*y_proba, *model.predict_proba(X_test)]
@@ -194,9 +194,9 @@ if __name__ == "__main__":
             vdf = vDataFrame(table, cur)
             n = len(vdf)
             k = 0
+            y_train = []
             y_proba = []
             # y_proba_reg = []
-            # y_train = []
             # y_proba_tree=[]
             # y_proba_boost=[]
             # y_proba_forest=[]
