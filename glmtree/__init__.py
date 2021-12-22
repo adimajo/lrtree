@@ -100,11 +100,11 @@ class Glmtree:
         Boolean (T/F) specifying if a validation set is required.
         If True, the provided data is split to provide 20% of observations in a validation set
         and the reported performance is the Gini index on the validation set (if no test=False).
-        The quality of the discretization at each step is evaluated using the Gini index on the
+        The quality of the model at each step is evaluated using the Gini index on the
         validation set, so criterion must be set to "gini".
         :type: bool
     .. attribute:: criterion
-        The criterion to be used to assess the goodness-of-fit of the discretization: \
+        The criterion to be used to assess the goodness-of-fit of the model: \
         "bic" or "aic" if no validation set, else "gini".
         :type: str
     .. attribute:: max_iter
@@ -112,23 +112,19 @@ class Glmtree:
         several MCMCs. Computation time can increase dramatically.
         :type: int
     .. attribute:: num_class
-        Number of initial discretization intervals for all variables. \
-        If :code:`num_class` is bigger than the number of factor levels for a given variable in
-        X, num_class is set (for this variable only) to this variable's number of factor levels.
+        Number of initial segments.
         :type: int
     .. attribute:: criterion_iter
         The value of the criterion wished to be optimized over the iterations.
         :type: list
     .. attribute:: best_link
-        The best link function between the original features and their quantized counterparts that
-        allows to quantize the data after learning.
-        :type: list
+        The best decision tree.
+        :type: sklearn.tree.DecisionTreeClassifier
     .. attribute:: best_reglog:
-        The best logistic regression on quantized data found with best_link.
-        :type: statsmodels.formula.api.glm
-    .. todo: on n'utilise plus statsmodels?
+        The list of the best logistic regression on each segment (found with best_link).
+        :type: list
     .. attribute:: ratios
-        The line rows corresponding to the splits.
+        The float ratio values for splitting of a dataset in test, validation.
         :type: tuple
     """
 
@@ -154,11 +150,11 @@ class Glmtree:
                                     provide 20% of observations in a validation set
                                     and the reported performance is the Gini index on
                                     the validation set (if no test=False). The quality
-                                    of the discretization at each step is evaluated
+                                    of the model at each step is evaluated
                                     using the Gini index on the validation set, so
                                     criterion must be set to "gini".
             :param str criterion:   The criterion to be used to assess the
-                                    goodness-of-fit of the discretization: "bic" or
+                                    goodness-of-fit of the model: "bic" or
                                     "aic" if no validation set, else "gini".
             :param int max_iter:    Number of MCMC steps to perform. The more the
                                     better, but it may be more intelligent to use
@@ -166,11 +162,7 @@ class Glmtree:
                                     dramatically. Defaults to 100.
             :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
                                     Sum of values should be less than 1. Defaults to (0.7, 0.3)
-            :param int class_num:   Number of initial separation classes for all
-                                    variables. If :code:`class_num` is bigger than the number of
-                                    factor levels for a given variable in
-                                    :code:`X`, :code:`class_num` is set (for this variable
-                                    only) to this variable's number of factor levels. Defaults to 10.
+            :param int class_num:   Number of initial segments. Defaults to 10.
         """
         _check_input_args(algo, validation, test, ratios, criterion)
 
@@ -210,10 +202,11 @@ class Glmtree:
         typically in their own predict / transform methods.
         """
         try:
-            sk.utils.validation.check_is_fitted(self.best_logreg)
-            for link in self.best_link:
-                if isinstance(link, sk.linear_model.LogisticRegression):
-                    sk.utils.validation.check_is_fitted(link)
+            for logreg in self.best_logreg:
+                if isinstance(logreg, sk.linear_model.LogisticRegression):
+                    sk.utils.validation.check_is_fitted(logreg)
+            if isinstance(self.best_link, sk.tree.DecisionTreeClassifier):
+                sk.utils.validation.check_is_fitted(self.best_link)
         except sk.exceptions.NotFittedError as e:
             raise NotFittedError(str(e) + " If you did call fit, try increasing iter: "
                                           "it means it did not find a better solution than the random initialization.")

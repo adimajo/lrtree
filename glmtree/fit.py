@@ -12,29 +12,6 @@ from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
 
 
-class OneClassReg():
-    def __init__(self, *args, **kwargs):
-        self._single_class_label = None
-        self.n_features_in_ = None
-        self.coef_=None
-
-    def fit(self, X, y, sample_weight=None):
-        self._single_class_label = y.iloc[0]
-        self.n_features_in_ = X.shape[1]
-        return self
-
-    def predict(self, X):
-        return np.full(X.shape[0], self._single_class_label)
-
-    def predict_proba(self, X):
-        if self._single_class_label == 1:
-            return np.full((X.shape[0], 2), [0, 1])
-        else:
-            return np.full((X.shape[0], 2), [1, 0])
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import log_loss
-from sklearn.linear_model import LogisticRegression
-
 
 class OneClassReg:
     def __init__(self, *args, **kwargs):
@@ -67,10 +44,6 @@ def _check_args(X, y):
         msg = "X {} and y {} must be of the same length".format(X.shape, len(y))
         logger.error(msg)
         raise ValueError(msg)
-    if 'numpy' in str(type(X)):
-        types_data = [i.dtype in ("int32", "float64") for i in X]
-    else:
-        types_data = [X[i].dtype in ("int32", "float64") for i in X.columns]
     if 'numpy' in str(type(X)):
         types_data = [i.dtype in ("int32", "int64", "float32", "float64") for i in X]
     else:
@@ -225,7 +198,7 @@ def _vectorized_multinouilli(prob_matrix, items):
     return items[k]
 
 
-def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, OptimalSize=True):
+def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal_size=True):
     """
     Fits the Glmtree object.
 
@@ -243,7 +216,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
         Maximum depth of the tree used
     :param float min_impurity_decrease:
         Parameter used to split (or not) the decision Tree
-    :param bool OptimalSize:
+    :param bool optimal_size:
         Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
     """
     _check_args(X, y)
@@ -270,7 +243,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
             for c_iter in range(self.class_num):
                 # If penalty ='l1', solver='liblinear' or 'saga' (large datasets),
                 # default ’lbfgs’, C small leads to stronger regularization
-                models[c_iter] = LogisticRegression(penalty='l2', C=0.1, tol=1e-2, warm_start=True)
+                models[c_iter] = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-2, warm_start=True)
 
             # Start of main logic
             while i < self.max_iter and not stopping_criterion:
@@ -363,7 +336,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         X, df[df.index.isin(self.train_rows)]["c_hat"])
                     link = clf
 
-                    if OptimalSize and self.validation:
+                    if optimal_size and self.validation:
                         X_validate = df.drop(['y', 'c_map', 'c_hat'], axis=1)
                         X_validate = X_validate[df.index.isin(self.validate_rows)]
                         path = clf.cost_complexity_pruning_path(X, df[df.index.isin(self.train_rows)]["c_hat"])
@@ -450,11 +423,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 weights = []
                 train_data = []
                 leaf = []
-                for k in range(len(df)):
+                for q in range(len(df)):
                     for j in range(self.class_num):
                         leaf.append(j)
-                        train_data.append(X[k])
-                        weights.append(proportion[k][j])
+                        train_data.append(X[q])
+                        weights.append(proportion[q][j])
                 clf = DecisionTreeClassifier(max_depth=tree_depth, min_impurity_decrease=min_impurity_decrease)
                 clf.fit(train_data, leaf, weights)
                 link = clf
@@ -548,13 +521,13 @@ def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, clas
                 Number of initial discretization intervals for all variables."""
     model = glmtree.Glmtree(algo=algo, test=False, validation=validation, criterion=criterion, ratios=(0.7,),
                             class_num=class_num, max_iter=max_iter)
-    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, OptimalSize=optimal_size)
+    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, optimal_size=optimal_size)
     return model
 
 
-def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10,
-                   min_impurity_decrease=0.0, optimal_size=True,
-                   validation=False):
+def fit_parallelized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10,
+                     min_impurity_decrease=0.0, optimal_size=True,
+                     validation=False):
     """A fit function which creates tge model and fits it, where the random initilisations are parallized
             :param str algo:
             :param str criterion:
@@ -588,7 +561,7 @@ def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max
     models = Parallel(n_jobs=nb_jobs)(
         delayed(fit_func)(X, y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
                           class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease,
-                          OptimalSize=optimal_size) for _
+                          optimal_size=optimal_size) for _
         in range(nb_init))
     critere = -np.inf
     best_model = None
