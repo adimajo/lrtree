@@ -1,8 +1,130 @@
-# The `glmtree` package
-This repository contains the implementation of Glmtree algorithm for data classification.
+[![PyPI version](https://badge.fury.io/py/lrtree.svg)](https://badge.fury.io/py/lrtree)
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/glmtree.svg)](https://pypi.python.org/pypi/glmtree/)
+[![PyPi Downloads](https://img.shields.io/pypi/dm/lrtree)](https://img.shields.io/pypi/dm/lrtree)
+[![Build Status](https://travis-ci.org/adimajo/glmtree_python.svg?branch=master)](https://travis-ci.org/adimajo/glmtree_python)
+![Python package](https://github.com/adimajo/glmtree_python/workflows/Python%20package/badge.svg)
+[![codecov](https://codecov.io/gh/adimajo/glmtree_python/branch/master/graph/badge.svg)](https://codecov.io/gh/adimajo/glmtree_python)
 
-Glmtree is a logistic regression trees based approach that is described in [this thesis paper](https://hal.archives-ouvertes.fr/tel-02302691/).
+# Logistic regression trees
 
+Table of Contents
+-----------------
+
+* [Documentation](https://adimajo.github.io/glmtree_python)
+* [Installation instructions](#-installing-the-package)
+* [Theory](#-use-case-example)
+* [Some examples](#-the-lrtree-package)
+* [Open an issue](https://github.com/adimajo/glmtree_python/issues/new/choose)
+* [References](#-references)
+* [Contribute](#-contribute)
+
+## Motivation
+
+The goal of `lrtree` is to build decision trees with logistic regressions at their leaves, so that the resulting model mixes non parametric VS parametric and stepwise VS linear approaches to have the best predictive results, yet maintaining interpretability.
+
+This is the implementation of glmtree as described in *Formalization and study of statistical problems in Credit Scoring*, Ehrhardt A. (see [manuscript](https://github.com/adimajo/manuscrit_these) or [web article](https://adimajo.github.io/logistic_trees.html))
+
+## Getting started
+
+These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
+
+### Prerequisites
+
+This code is supported on Python 3.7, 3.8, 3.9.
+
+### Installing the package
+
+#### Installing the development version
+
+If `git` is installed on your machine, you can use:
+
+```PowerShell
+pipenv install git+https://github.com/adimajo/glmtree_python.git
+```
+
+If `git` is not installed, you can also use:
+
+```PowerShell
+pipenv install --upgrade https://github.com/adimajo/glmtree_python/archive/master.tar.gz
+```
+
+#### Installing through the `pip` command
+
+You can install a stable version from [PyPi](https://pypi.org/project/lrtree/) by using:
+
+```PowerShell
+pip install lrtree
+```
+
+#### Installation guide for Anaconda
+
+The installation with the `pip` or `pipenv` command **should** work. If not, please raise an issue.
+
+#### For people behind proxy(ies)...
+
+A lot of people, including myself, work behind a proxy at work...
+
+A simple solution to get the package is to use the `--proxy` option of `pip`:
+
+```PowerShell
+pip --proxy=http://username:password@server:port install lrtree
+```
+
+where *username*, *password*, *server* and *port* should be replaced by your own values.
+
+If environment variables `http_proxy` and / or `https_proxy` and / or (unfortunately depending on applications...) 
+`HTTP_PROXY` and `HTTPS_PROXY` are set, the proxy settings should be picked up by `pip`.
+
+Over the years, I've found [CNTLM](http://cntlm.sourceforge.net/) to be a great tool in this regard.
+
+## Authors
+
+* [Adrien Ehrhardt](https://adimajo.github.io)
+* [Vincent Vandewalle](https://sites.google.com/site/vvandewa/)
+* [Philippe Heinrich](http://math.univ-lille1.fr/~heinrich/)
+* [Christophe Biernacki](http://math.univ-lille1.fr/~biernack/)
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+This research has been financed by [Crédit Agricole Consumer Finance](https://www.ca-consumerfinance.com/en.html) through a CIFRE PhD.
+
+This research was supported by [Inria Lille - Nord-Europe](https://www.inria.fr/centre/lille) and [Lille University](https://www.univ-lille.fr/en/home/) as part of a PhD.
+
+## References
+
+Ehrhardt, A. (2019), [Formalization and study of statistical problems in Credit Scoring: Reject inference, discretization and pairwise interactions, logistic regression trees](https://hal.archives-ouvertes.fr/tel-02302691) ([PhD thesis](https://github.com/adimajo/manuscrit_these)).
+
+## Contribute
+
+You can clone this project using:
+
+```PowerShell
+git clone https://github.com/adimajo/glmdisc_python.git
+```
+
+You can install all dependencies, including development dependencies, using (note that 
+this command requires `pipenv` which can be installed by typing `pip install pipenv`):
+
+```PowerShell
+pipenv install -d
+```
+
+You can build the documentation by going into the `docs` directory and typing `make html`.
+
+NOTE: you need to have a separate folder named `glmdisc_python_docs` in the same directory as this repository,
+as it will build the docs there so as to allow me to push this other directory as a separate `gh-pages` branch.
+
+You can run the tests by typing `coverage run -m pytest`, which relies on packages 
+[coverage](https://coverage.readthedocs.io/en/coverage-5.2/) and [pytest](https://docs.pytest.org/en/latest/).
+
+To run the tests in different environments (one for each version of Python), install `pyenv` (see [the instructions here](https://github.com/pyenv/pyenv)),
+install all versions you want to test (see [tox.ini](tox.ini)), e.g. with `pyenv install 3.7.0` and run 
+`pipenv run pyenv local 3.7.0 [...]` (and all other versions) followed by `pipenv run tox`.
+ 
 ## Python Environment 
 The project uses `pipenv`. [An interesting resource](https://realpython.com/pipenv-guide/).
 
