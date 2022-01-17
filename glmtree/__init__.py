@@ -135,7 +135,8 @@ class Glmtree:
                  criterion: str = "bic",
                  ratios: tuple = (0.7,),
                  class_num: int = 10,
-                 max_iter: int = 100):
+                 max_iter: int = 100,
+                 data_treatment: bool = False):
         """
         Initializes self by checking if its arguments are appropriately specified.
 
@@ -163,6 +164,7 @@ class Glmtree:
             :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
                                     Sum of values should be less than 1. Defaults to (0.7, 0.3)
             :param int class_num:   Number of initial segments. Defaults to 10.
+            :param bool data_treatment:  Whether or not we want the data to be discretized/merged categories in each leaf.
         """
         _check_input_args(algo, validation, test, ratios, criterion)
 
@@ -182,6 +184,7 @@ class Glmtree:
         self.max_iter = max_iter
         self.class_num = class_num
         self.ratios = ratios
+        self.data_treatment = data_treatment
 
         # Init data
         self.train_rows, self.validate_rows, self.test_rows = None, None, None
@@ -192,6 +195,7 @@ class Glmtree:
         self.best_logreg = None
         self.best_criterion = -np.inf
         self.criterion_iter = []
+        self.best_treatment = None
 
     def check_is_fitted(self):
         """Perform is_fitted validation for estimator.

@@ -4,9 +4,10 @@ Predict, predict_proba and precision methods for the Glmtree class
 import pandas as pd
 import numpy as np
 from copy import deepcopy
+from scripts.traitement_data import bin_data_cate_test, categorie_data_bin_test
 
 
-def predict(self, X):
+def predict(self, X, column_names=None):
     """
     Predicts the labels for new values using previously fitted glmtree object
 
@@ -19,7 +20,12 @@ def predict(self, X):
     link = self.best_link
     logreg = self.best_logreg
     # Predicted class for each sample
-    classes = link.predict(X)
+    if self.data_treatment:
+        enc_global = self.best_treatment["global"]
+        classes = link.predict(bin_data_cate_test(X, enc_global))
+    else:
+        classes = link.predict(X)
+    # Classes that were predicted : c_map
     liste_cla = np.unique(classes)
 
     X_df = pd.DataFrame(X)
@@ -29,7 +35,13 @@ def predict(self, X):
     for i in range(len(liste_cla)):
         filtre = X_df["class"] == liste_cla[i]
         bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
-        bloc_pred = logreg[i].predict(bloc.add_prefix("par_"))
+        bloc = bloc.add_prefix("par_")
+        if self.data_treatment:
+            treatment = self.best_treatment
+            bloc = categorie_data_bin_test(bloc.rename(columns=column_names), treatment[liste_cla[i]]["enc"],
+                                           treatment[liste_cla[i]]["merged_cat"],
+                                           treatment[liste_cla[i]]["discret_cat"])
+        bloc_pred = logreg[i].predict(bloc)
         k = 0
         for j in range(len(X_df)):
             if filtre[j]:
@@ -39,7 +51,7 @@ def predict(self, X):
     return X_df["pred"].to_numpy()
 
 
-def predict_proba(self, X):
+def predict_proba(self, X, column_names=None):
     """
     Predicts the probability of the labels for new values using previously fitted glmtree object
 
@@ -52,9 +64,14 @@ def predict_proba(self, X):
     link = self.best_link
     logreg = self.best_logreg
     # Predicted class for each sample
-    classes = link.predict(X)
+    if self.data_treatment:
+        enc_global = self.best_treatment["global"]
+        classes = link.predict(bin_data_cate_test(X, enc_global))
+    else:
+        classes = link.predict(X)
+    # Sorted list of the classes that were predicted
     liste_cla = np.unique(classes)
-
+    print(liste_cla)
     X_df = pd.DataFrame(X)
     X_df["class"] = classes
     X_df["pred"] = 0
@@ -62,7 +79,14 @@ def predict_proba(self, X):
     for i in range(len(liste_cla)):
         filtre = X_df["class"] == liste_cla[i]
         bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
-        bloc_pred = logreg[i].predict_proba(bloc.add_prefix("par_"))
+        if self.data_treatment:
+            treatment = self.best_treatment
+            bloc = categorie_data_bin_test(bloc.rename(columns=column_names), treatment[liste_cla[i]]["enc"],
+                                           treatment[liste_cla[i]]["merged_cat"],
+                                           treatment[liste_cla[i]]["discret_cat"])
+        else :
+            bloc = bloc.add_prefix("par_")
+        bloc_pred = logreg[i].predict_proba(bloc)
         k = 0
         for j in range(len(X_df)):
             if filtre[j]:
@@ -72,7 +96,7 @@ def predict_proba(self, X):
     return X_df["pred"].to_numpy()
 
 
-def precision(self, X_test, y_test):
+def precision(self, X_test, y_test, column_names=None):
     """Scores the precision of the prediction on the test set
     :param numpy.ndarray X_test:
         array_like of shape (n_samples, n_features)
@@ -87,7 +111,7 @@ def precision(self, X_test, y_test):
         msg = "X_test and y_test need to have the same size"
         raise ValueError(msg)
 
-    prediction = self.predict(X_test)
+    prediction = self.predict(X_test, column_names)
     diff = np.count_nonzero(prediction - y_test)
     precision = 1 - diff / len(X_test)
     return precision

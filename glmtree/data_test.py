@@ -39,6 +39,6 @@ def generate_data(n, d, theta=None):
 
     bic = -d * np.log(n)
     for i in range(n):
-        bic += y[i] * np.log(p[i]) + (1 - y[i]) * np.log(1 - p[i])
+        bic += 2 * y[i] * np.log(p[i]) + 2 * (1 - y[i]) * np.log(1 - p[i])
 
     return x, y, theta, bic
