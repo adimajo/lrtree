@@ -320,8 +320,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 predictions_log = np.zeros(shape=(self.n, df["c_hat"].nunique()))
 
                 # Getting p(y | x, c_hat) and filling the probabilities
-                for c_iter in range(df["c_hat"].nunique()):
-                    idx = df["c_hat"] == np.sort(df["c_hat"].unique())[c_iter]
+                for c_iter in np.unique(df["c_hat"]):
+                    idx = df["c_hat"] == c_iter
                     train_data = df[idx & df.index.isin(self.train_rows)].drop(['c_map', 'c_hat'], axis=1)
 
                     if data_treatment:
@@ -361,7 +361,6 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 # Getting p(y | x, c_map)
                 self.criterion_iter.append(0)
                 for c_iter in np.unique(df["c_map"]):
-                    # idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
                     idx = df["c_map"] == c_iter
                     train_data = df[idx & df.index.isin(self.train_rows)]
                     y = train_data['y']

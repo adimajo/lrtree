@@ -6,6 +6,9 @@ from sklearn import tree
 import matplotlib.pyplot as plt
 from sklearn.metrics import RocCurveDisplay
 import time
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import roc_auc_score
+
 
 
 # bon_critere1 = []
@@ -97,12 +100,11 @@ X_test, y_test, _, _ = generate_data(10000, 3)
 model = fit_parallelized(X, y, algo='SEM', criterion="aic", nb_init=10, tree_depth=2, class_num=4, max_iter=100)
 text_representation = tree.export_text(model.best_link)
 print(text_representation)
-tree.plot_tree(model.best_link)
-plt.show()
-plt.close()
+# tree.plot_tree(model.best_link)
+# plt.show()
+# plt.close()
 models = model.best_logreg
 print([mod.coef_ for mod in models])
 print("Precision", model.precision(X_test, y_test))
 y_proba = model.predict_proba(X_test)
-RocCurveDisplay.from_predictions(y_test, y_proba)
-plt.show()
+print("SEM test : ", roc_auc_score(y_test, y_proba))

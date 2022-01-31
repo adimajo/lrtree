@@ -71,7 +71,6 @@ def predict_proba(self, X, column_names=None):
         classes = link.predict(X)
     # Sorted list of the classes that were predicted
     liste_cla = np.unique(classes)
-    print(liste_cla)
     X_df = pd.DataFrame(X)
     X_df["class"] = classes
     X_df["pred"] = 0
