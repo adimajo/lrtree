@@ -291,11 +291,9 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                     r = r + 1
             else:
                 column_names = {}
-
             df["y"] = y
             df["c_map"] = np.random.randint(self.class_num, size=self.n)
             df["c_hat"] = df["c_map"]
-
             models = {}
             treatment = {}
             for c_iter in range(self.class_num):
@@ -411,13 +409,13 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 # Stopping when we reach a tree with only one leaf
                 if i > 0 and link == []:
                     stopping_criterion = True
-                    print("Stopped at iteration", i, "the model is juste a logistic regression with no tree.")
+                    print("Stopped at iteration", i, "the model is just a logistic regression with no tree.")
 
                 # Stopping when the criterion doesn't vary anymore
                 if i >= 20:
                     last_ones = self.criterion_iter[-10: -1]
                     variation = np.var(last_ones) ** 0.5
-                    if self.criterion == "gini" and variation < 0.005:
+                    if self.criterion == "gini" and variation < 0.0001:
                         stopping_criterion = True
                         print("Stopped at iteration", i)
                     if self.criterion != "gini" and variation < 0.01 * abs(self.best_criterion):
@@ -448,6 +446,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                             score = tree.score(X_validate, df[df.index.isin(self.validate_rows)]["c_hat"])
                             # Choosing the tree with the best accuracy on the validation set
                             if score > best_score:
+                                # tree = DecisionTreeClassifier(ccp_alpha=0.5*alpha)
+                                # tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
                                 link = tree
 
                 else:

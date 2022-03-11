@@ -12,6 +12,37 @@ import itertools
 pd.options.mode.chained_assignment = None  # default='warn'
 
 
+def donnes_cacf(data):
+    # Transformer les colonnes dates en colonnees durées
+    for col in ['DNAISS', 'DNACJ']:
+        data[col].fillna(np.datetime64('2022-01-01'), inplace=True)
+        data[col] = (np.datetime64('2022-01-01') - data[col]).dt.days
+
+    def to_decode(bbyte):
+        return bbyte.decode('UTF-8')
+
+    def format_to_date(date):
+        return np.datetime64(str(date[0:4]) + '-' + str(date[4:6]))
+
+    for col in ['DEMBA', 'AMEMBC', 'DCLEM', 'AMCIRC']:
+        data[col].fillna(b'202201', inplace=True)
+        data[col] = data[col].apply(to_decode)
+        data[col].replace(to_replace=['01', '0 0 0 0', '00000000'], value='202201', inplace=True)
+        data[col].replace(to_replace=['10190201', '11111101'], value='197001', inplace=True)
+        data[col] = data[col].apply(format_to_date)
+        data[col] = (np.datetime64('2022-01-01') - data[col]).dt.days
+
+    for col in ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'CPCL', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE',
+                'NATB', 'CVFISC', 'grscor2']:
+        data[col].fillna(b'0', inplace=True)
+        data[col] = data[col].apply(to_decode)
+
+    for col in ['MT_LOYER', 'MT_CHRG', 'MT_PENS_DU']:
+        data[col].fillna(0, inplace=True)
+
+    return data
+
+
 def clean_data(data):
     """Removes the columns that are not useful for the prediction, pr which were already predictions
 
@@ -109,7 +140,7 @@ def categorie_data_labels(data, data_val):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     X_cat = []
     X_val_cat = []
@@ -149,7 +180,7 @@ def categorie_data_bin_train_test(data, data_val):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     for column in categorical:
         if column in X.columns:
@@ -206,7 +237,8 @@ def categorie_data_bin_train(data, var_cible):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
     to_change = []
     merged_cat = {}
     for column in categorical:
@@ -268,7 +300,8 @@ def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
     to_change = []
     for column in categorical:
         if column in X_val.columns:
@@ -306,7 +339,7 @@ def bin_data_cate_train(data, var_cible):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     for column in categorical:
         if column in X.columns:
@@ -341,7 +374,7 @@ def bin_data_cate_test(data_val, enc):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     for column in categorical:
         if column in X_val.columns:
@@ -434,7 +467,8 @@ def traitement_train(data):
     if "Defaut_12_Mois_contagion" in X.columns:
         X["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)], inplace=True)
     X = extreme_values(X, missing=False)
-    X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X, var_cible="Defaut_12_Mois_contagion")
+    # X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X, var_cible="Defaut_12_Mois_contagion")
+    X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X, var_cible="cible")
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
     return X, labels, enc, scaler, merged_cat, discret_cat
@@ -546,7 +580,7 @@ def regroupement(X, var, var_predite, seuil=0.2):
     :param str var:
         Column we aim to predict
     :param float seuil:
-        Value for the p-value other which we merge modalities
+        Value for the p-value over which we merge modalities
      """
     X_grouped = X.copy()
 
