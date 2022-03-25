@@ -1,15 +1,20 @@
 """
-fit module for the Glmtree class
+fit method for the Glmtree class
 """
 import glmtree
 import numpy as np
 import pandas as pd
+
+pd.options.mode.chained_assignment = None  # default='warn'
 from joblib import Parallel, delayed
 from loguru import logger
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
+from scripts.traitement_data import categorie_data_bin_train, categorie_data_bin_test, bin_data_cate_train
+from sklearn.preprocessing import OneHotEncoder
+from copy import deepcopy
 
 
 class OneClassReg:
@@ -85,12 +90,14 @@ def _dataset_split(self):
         self.train_rows = np.random.choice(self.n, self.n, replace=False)
 
 
-def calc_criterion(self, df, model_c_map):
+def calc_criterion(self, df, model_c_map, treatment=None, column_names=None):
     """
     Computes the criterion for this model.
 
     :param pandas.Dataframe df: The dataframe of the data used
     :param list model_c_map: The list of the models for each leaf.
+    :param dict treatment: The dictionary of the data treatment for each leaf.
+    :param dict column_names: The dictionary of the real column names.
     :returns: The criteria.
     :rtype: float
     """
@@ -100,15 +107,28 @@ def calc_criterion(self, df, model_c_map):
         y_true = []
         y_proba = []
         k = 0
-        for c_iter in range(df["c_map"].nunique()):
+        for c_iter in np.unique(df["c_map"]):
             model = model_c_map[k]
-            idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+            idx = df["c_map"] == c_iter
             if self.validation:
                 y_validate = df[idx & df.index.isin(self.validate_rows)]["y"].tolist()
-                X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+                X_validate = df[idx & df.index.isin(self.validate_rows)]
+                X_validate = X_validate.drop(['y', 'c_hat', 'c_map'], axis=1)
+                if self.data_treatment:
+                    X_validate = X_validate.rename(columns=column_names)
+                    X_validate = categorie_data_bin_test(X_validate,
+                                                         treatment[c_iter]["enc"],
+                                                         treatment[c_iter]["merged_cat"],
+                                                         treatment[c_iter]["discret_cat"])
             else:
                 y_validate = df[idx & df.index.isin(self.train_rows)]["y"].tolist()
-                X_validate = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+                X_validate = df[idx & df.index.isin(self.train_rows)]
+                X_validate = X_validate.drop(['y', 'c_hat', 'c_map'], axis=1)
+                if self.data_treatment:
+                    X_validate = categorie_data_bin_test(X_validate.rename(columns=column_names),
+                                                         treatment[c_iter]["enc"],
+                                                         treatment[c_iter]["merged_cat"],
+                                                         treatment[c_iter]["discret_cat"])
             if X_validate.shape[0] > 0:
                 pred = model.predict_proba(X_validate.to_numpy())
                 y_pred = [pred[i][1] for i in range(len(pred))]
@@ -121,54 +141,76 @@ def calc_criterion(self, df, model_c_map):
         # Computing -AIC, which we maximise
         if self.validation:
             k = 0
-            for c_iter in range(df["c_map"].nunique()):
+            for c_iter in np.unique(df["c_map"]):
                 model = model_c_map[k]
-                idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+                idx = df["c_map"] == c_iter
                 y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
-                X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+                X_validate = df[idx & df.index.isin(self.validate_rows)]
+                X_validate = X_validate.drop(['y', 'c_hat', 'c_map'], axis=1)
+                if self.data_treatment:
+                    X_validate = categorie_data_bin_test(X_validate.rename(columns=column_names),
+                                                         treatment[c_iter]["enc"],
+                                                         treatment[c_iter]["merged_cat"],
+                                                         treatment[c_iter]["discret_cat"])
                 if X_validate.shape[0] > 0:
                     y_pred = model.predict_proba(X_validate.to_numpy())
-                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) -\
-                        model.n_features_in_
+                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) - \
+                                model.n_features_in_
                 k = k + 1
         else:
             k = 0
-            for c_iter in range(df["c_map"].nunique()):
+            for c_iter in np.unique(df["c_map"]):
                 model = model_c_map[k]
-                idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+                idx = df["c_map"] == c_iter
                 y_true = df[idx & df.index.isin(self.train_rows)]["y"]
-                X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+                X_pred = df[idx & df.index.isin(self.train_rows)]
+                X_pred = X_pred.drop(['y', 'c_hat', 'c_map'], axis=1)
+                if self.data_treatment:
+                    X_pred = categorie_data_bin_test(X_pred.rename(columns=column_names), treatment[c_iter]["enc"],
+                                                     treatment[c_iter]["merged_cat"],
+                                                     treatment[c_iter]["discret_cat"])
                 y_pred = model.predict_proba(X_pred.to_numpy())
-                criterion = criterion - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) -\
-                    model.n_features_in_
+                criterion = criterion - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) - \
+                            model.n_features_in_
                 k = k + 1
 
     elif self.criterion == "bic":
         # Computing -BIC, which we maximise
         if self.validation:
             k = 0
-            for c_iter in range(df["c_map"].nunique()):
+            for c_iter in np.unique(df["c_map"]):
                 model = model_c_map[k]
-                idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+                idx = df["c_map"] == c_iter
                 y_validate = df[idx & df.index.isin(self.validate_rows)]["y"]
-                X_validate = df[idx & df.index.isin(self.validate_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+                X_validate = df[idx & df.index.isin(self.validate_rows)]
+                X_validate = X_validate.drop(['y', 'c_hat', 'c_map'], axis=1)
+                if self.data_treatment:
+                    X_validate = categorie_data_bin_test(X_validate.rename(columns=column_names),
+                                                         treatment[c_iter]["enc"],
+                                                         treatment[c_iter]["merged_cat"],
+                                                         treatment[c_iter]["discret_cat"])
                 if X_validate.shape[0] > 0:
                     y_pred = model.predict_proba(X_validate.to_numpy())
-                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) -\
-                        np.log(len(X_validate)) * model.n_features_in_
+                    criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) - \
+                                np.log(len(X_validate)) * model.n_features_in_
                 k = k + 1
         else:
             k = 0
-            for c_iter in range(df["c_map"].nunique()):
+            for c_iter in np.unique(df["c_map"]):
                 model = model_c_map[k]
-                idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+                idx = df["c_map"] == c_iter
                 y_true = df[idx & df.index.isin(self.train_rows)]["y"]
-                X_pred = df[idx & df.index.isin(self.train_rows)][df.columns.difference(["y", "c_map", "c_hat"])]
+                X_pred = df[idx & df.index.isin(self.train_rows)]
+                X_pred = X_pred.drop(['y', 'c_hat', 'c_map'], axis=1)
+                if self.data_treatment:
+                    X_pred = categorie_data_bin_test(X_pred.rename(columns=column_names), treatment[c_iter]["enc"],
+                                                     treatment[c_iter]["merged_cat"],
+                                                     treatment[c_iter]["discret_cat"])
                 y_pred = model.predict_proba(X_pred.to_numpy())
                 criterion = criterion - 2 * log_loss(y_true, y_pred,
                                                      normalize=False,
                                                      labels=[0, 1]) - \
-                    np.log(len(X_pred)) * model.n_features_in_
+                            np.log(len(X_pred)) * model.n_features_in_
                 k = k + 1
 
     return criterion
@@ -197,7 +239,7 @@ def _vectorized_multinouilli(prob_matrix, items):
     return items[k]
 
 
-def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, OptimalSize=True):
+def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal_size=True):
     """
     Fits the Glmtree object.
 
@@ -215,10 +257,14 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
         Maximum depth of the tree used
     :param float min_impurity_decrease:
         Parameter used to split (or not) the decision Tree
-    :param bool OptimalSize:
+    :param bool optimal_size:
         Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
     """
-    _check_args(X, y)
+
+    data_treatment = self.data_treatment
+
+    if not data_treatment:
+        _check_args(X, y)
 
     self.n = len(y)
 
@@ -234,15 +280,34 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
             self.criterion_iter = []
             df = pd.DataFrame(X_copy)
             df = df.add_prefix("par_")
+
+            if isinstance(X, pd.DataFrame):
+                # Dictionary of the correspondence between the column names par_0... and the real names
+                column_names = {}
+                or_col_names = X.columns
+                r = 0
+                for column in df.columns:
+                    column_names[column] = or_col_names[r]
+                    r = r + 1
+            else:
+                column_names = {}
             df["y"] = y
             df["c_map"] = np.random.randint(self.class_num, size=self.n)
             df["c_hat"] = df["c_map"]
-
             models = {}
+            treatment = {}
             for c_iter in range(self.class_num):
                 # If penalty ='l1', solver='liblinear' or 'saga' (large datasets),
                 # default ’lbfgs’, C small leads to stronger regularization
-                models[c_iter] = LogisticRegression(penalty='l2', C=0.1, tol=1e-2, warm_start=True)
+                models[c_iter] = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-2, warm_start=False)
+                treatment[c_iter] = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
+
+            if data_treatment:
+                # Data without treatment (one hot on categorical variables), used for the tree
+                X_tree, enc_global = bin_data_cate_train(X.copy(), "y")
+                treatment["global"] = enc_global
+            else:
+                X_tree = df.drop(['y', 'c_map', 'c_hat'], axis=1)
 
             # Start of main logic
             while i < self.max_iter and not stopping_criterion:
@@ -252,12 +317,25 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 model_c_map = []
                 predictions_log = np.zeros(shape=(self.n, df["c_hat"].nunique()))
 
-                # Getting p(y | x, c_hat) and filling the probabilites
-                for c_iter in range(df["c_hat"].nunique()):
-                    idx = df["c_hat"] == np.sort(df["c_hat"].unique())[c_iter]
-                    train_data = df[idx & df.index.isin(self.train_rows)]
-                    y = train_data['y']
-                    X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                # Getting p(y | x, c_hat) and filling the probabilities
+                for c_iter in np.unique(df["c_hat"]):
+                    idx = df["c_hat"] == c_iter
+                    train_data = df[idx & df.index.isin(self.train_rows)].drop(['c_map', 'c_hat'], axis=1)
+
+                    if data_treatment:
+                        # Discretization / merging categorical variables (and removes y)
+                        train_data = train_data.rename(columns=column_names)
+                        train_data, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(
+                            train_data, var_cible="y")
+                        treatment[c_iter]["enc"] = enc
+                        treatment[c_iter]["merged_cat"] = merged_cat
+                        treatment[c_iter]["discret_cat"] = discret_cat
+                        X = train_data.to_numpy()
+                    else:
+                        X = train_data.drop(['y'], axis=1).to_numpy()
+
+                    y = df[idx & df.index.isin(self.train_rows)]['y']
+
                     if y.nunique() == 1:
                         # A model for when there is only one class (not a regression)
                         model = OneClassReg()
@@ -268,19 +346,31 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                         models[c_iter] = model
 
                     logregs_c_hat.append(logreg)
-                    to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1).to_numpy()
-                    predictions_log[:, c_iter] = logreg.predict(to_predict)
+                    to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
+                    if data_treatment:
+                        # Applies the data treatment for this leaf
+                        to_predict = to_predict.rename(columns=column_names)
+                        to_predict = categorie_data_bin_test(to_predict, treatment[c_iter]["enc"], treatment[c_iter]["merged_cat"],
+                                                             treatment[c_iter]["discret_cat"])
+                    predictions_log[:, c_iter] = logreg.predict(to_predict.to_numpy())
 
                 predictions_log[np.isnan(predictions_log)] = 0
 
                 # Getting p(y | x, c_map)
                 self.criterion_iter.append(0)
-
-                for c_iter in range(df["c_map"].nunique()):
-                    idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
+                for c_iter in np.unique(df["c_map"]):
+                    idx = df["c_map"] == c_iter
                     train_data = df[idx & df.index.isin(self.train_rows)]
                     y = train_data['y']
-                    X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                    X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
+
+                    if data_treatment:
+                        # Applying the data treatment (discretization, merging categories) for this segment
+                        X = X.rename(columns=column_names)
+                        X = categorie_data_bin_test(X, treatment[c_iter]["enc"],
+                                                    treatment[c_iter]["merged_cat"],
+                                                    treatment[c_iter]["discret_cat"])
+                    X = X.to_numpy()
 
                     if y.nunique() == 1:
                         model = OneClassReg()
@@ -292,9 +382,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     logregs_c_map.append(logreg)
                     model_c_map.append(model)
 
-                # Gettting the total criterion, for this model (tree + reg) proposition
-                self.criterion_iter[i] = calc_criterion(self, df, model_c_map)
-
+                # Getting the total criterion, for this model (tree + reg) proposition
+                self.criterion_iter[i] = calc_criterion(self, df, model_c_map, treatment, column_names)
                 # Best model yet
                 if self.criterion_iter[i] > self.best_criterion:
                     # Stopping when the criterion doesn't really get better anymore
@@ -306,6 +395,13 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                             self.criterion_iter[i] - self.best_criterion) < 0.01 * abs(self.best_criterion):
                         stopping_criterion = True
                         print("Stopped at iteration", i)
+
+                    best_treat={}
+                    if data_treatment:
+                        best_treat={"global" : treatment["global"]}
+                        for c_iter in range(df["c_hat"].nunique()):
+                            best_treat[c_iter]={"enc" : deepcopy(treatment[c_iter]["enc"]), "merged_cat" : deepcopy(treatment[c_iter]["merged_cat"]) , "discret_cat" : deepcopy(treatment[c_iter]["discret_cat"])}
+                    self.best_treatment = deepcopy(best_treat)
                     self.best_logreg = logregs_c_map
                     self.best_link = link
                     self.best_criterion = self.criterion_iter[i]
@@ -313,13 +409,13 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 # Stopping when we reach a tree with only one leaf
                 if i > 0 and link == []:
                     stopping_criterion = True
-                    print("Stopped at iteration", i, "the model is juste a logistic regression with no tree.")
+                    print("Stopped at iteration", i, "the model is just a logistic regression with no tree.")
 
                 # Stopping when the criterion doesn't vary anymore
                 if i >= 20:
                     last_ones = self.criterion_iter[-10: -1]
                     variation = np.var(last_ones) ** 0.5
-                    if self.criterion == "gini" and variation < 0.005:
+                    if self.criterion == "gini" and variation < 0.0001:
                         stopping_criterion = True
                         print("Stopped at iteration", i)
                     if self.criterion != "gini" and variation < 0.01 * abs(self.best_criterion):
@@ -328,16 +424,14 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
                 # Getting p(c_hat | x)
                 if df["c_hat"].nunique() > 1:
-                    X = df.drop(['y', 'c_map', 'c_hat'], axis=1)
-                    X = X[df.index.isin(self.train_rows)].to_numpy()
+                    X = X_tree[df.index.isin(self.train_rows)].to_numpy()
                     # Building the tree
                     clf = DecisionTreeClassifier(max_depth=tree_depth, min_impurity_decrease=min_impurity_decrease).fit(
                         X, df[df.index.isin(self.train_rows)]["c_hat"])
                     link = clf
 
-                    if OptimalSize and self.validation:
-                        X_validate = df.drop(['y', 'c_map', 'c_hat'], axis=1)
-                        X_validate = X_validate[df.index.isin(self.validate_rows)]
+                    if optimal_size and self.validation:
+                        X_validate = X_tree[df.index.isin(self.validate_rows)].to_numpy()
                         path = clf.cost_complexity_pruning_path(X, df[df.index.isin(self.train_rows)]["c_hat"])
                         alphas = path.ccp_alphas
 
@@ -349,9 +443,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                             alpha = alphas[a]
                             tree = DecisionTreeClassifier(ccp_alpha=alpha)
                             tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
-                            score = tree.score(X_validate.to_numpy(), df[df.index.isin(self.validate_rows)]["c_hat"])
+                            score = tree.score(X_validate, df[df.index.isin(self.validate_rows)]["c_hat"])
                             # Choosing the tree with the best accuracy on the validation set
                             if score > best_score:
+                                # tree = DecisionTreeClassifier(ccp_alpha=0.5*alpha)
+                                # tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
                                 link = tree
 
                 else:
@@ -359,18 +455,17 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                     break
 
                 # Choice of the new c_hat = random step
-                X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                tree_pred = link.predict_proba(X_tree)
                 y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
-                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) +\
-                    np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
-                matrix = np.multiply(link.predict_proba(X), masked_predictions_log)
+                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) + \
+                                         np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
+                matrix = np.multiply(tree_pred, masked_predictions_log)
                 row_sums = matrix.sum(axis=1)
                 p = matrix / row_sums[:, np.newaxis]
                 df["c_hat"] = _vectorized_multinouilli(p, df["c_hat"].unique())
 
                 # c_map calculation
-                X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
-                df["c_map"] = np.argmax(link.predict_proba(X), axis=1)
+                df["c_map"] = np.argmax(tree_pred, axis=1)
 
                 i = i + 1
 
@@ -422,11 +517,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 weights = []
                 train_data = []
                 leaf = []
-                for k in range(len(df)):
+                for q in range(len(df)):
                     for j in range(self.class_num):
                         leaf.append(j)
-                        train_data.append(X[k])
-                        weights.append(proportion[k][j])
+                        train_data.append(X[q])
+                        weights.append(proportion[q][j])
                 clf = DecisionTreeClassifier(max_depth=tree_depth, min_impurity_decrease=min_impurity_decrease)
                 clf.fit(train_data, leaf, weights)
                 link = clf
@@ -434,8 +529,8 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
                 # New matric of proportions p_theta_1|x
                 y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
                 # p_theta_y|x
-                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) +\
-                    np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
+                masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) + \
+                                         np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
                 # p_beta_c|x * p_theta_y|x
                 matrix = np.multiply(link.predict_proba(X), masked_predictions_log)
                 row_sums = matrix.sum(axis=1)
@@ -495,7 +590,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, Optimal
 
 
 def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, class_num=10, validation=False,
-             min_impurity_decrease=0.0, optimal_size=True):
+             min_impurity_decrease=0.0, optimal_size=True, data_treatment=False):
     """
     Creates the glmtree model and fits it to the data
 
@@ -519,15 +614,15 @@ def fit_func(X, y, algo='SEM', criterion="aic", max_iter=100, tree_depth=5, clas
             :param int class_num:
                 Number of initial discretization intervals for all variables."""
     model = glmtree.Glmtree(algo=algo, test=False, validation=validation, criterion=criterion, ratios=(0.7,),
-                            class_num=class_num, max_iter=max_iter)
-    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, OptimalSize=optimal_size)
+                            class_num=class_num, max_iter=max_iter, data_treatment=data_treatment)
+    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, optimal_size=optimal_size)
     return model
 
 
-def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10,
-                   min_impurity_decrease=0.0, optimal_size=True,
-                   validation=False):
-    """A fit function which creates tge model and fits it, where the random initilisations are parallized
+def fit_parallelized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5, class_num=10,
+                     min_impurity_decrease=0.0, optimal_size=True,
+                     validation=False, data_treatment=False):
+    """A fit function which creates tge model and fits it, where the random initializations are parallelized
             :param str algo:
             :param str criterion:
             :param float min_impurity_decrease:
@@ -560,7 +655,7 @@ def fit_parralized(X, y, algo='SEM', criterion="aic", nb_init=5, nb_jobs=-1, max
     models = Parallel(n_jobs=nb_jobs)(
         delayed(fit_func)(X, y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
                           class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease,
-                          OptimalSize=optimal_size) for _
+                          optimal_size=optimal_size, data_treatment=data_treatment) for _
         in range(nb_init))
     critere = -np.inf
     best_model = None

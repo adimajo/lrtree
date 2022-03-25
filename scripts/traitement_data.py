@@ -9,6 +9,38 @@ from sklearn import metrics
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 import itertools
+pd.options.mode.chained_assignment = None  # default='warn'
+
+
+def donnes_cacf(data):
+    # Transformer les colonnes dates en colonnees durées
+    for col in ['DNAISS', 'DNACJ']:
+        data[col].fillna(np.datetime64('2022-01-01'), inplace=True)
+        data[col] = (np.datetime64('2022-01-01') - data[col]).dt.days
+
+    def to_decode(bbyte):
+        return bbyte.decode('UTF-8')
+
+    def format_to_date(date):
+        return np.datetime64(str(date[0:4]) + '-' + str(date[4:6]))
+
+    for col in ['DEMBA', 'AMEMBC', 'DCLEM', 'AMCIRC']:
+        data[col].fillna(b'202201', inplace=True)
+        data[col] = data[col].apply(to_decode)
+        data[col].replace(to_replace=['01', '0 0 0 0', '00000000'], value='202201', inplace=True)
+        data[col].replace(to_replace=['10190201', '11111101'], value='197001', inplace=True)
+        data[col] = data[col].apply(format_to_date)
+        data[col] = (np.datetime64('2022-01-01') - data[col]).dt.days
+
+    for col in ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'CPCL', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE',
+                'NATB', 'CVFISC', 'grscor2']:
+        data[col].fillna(b'0', inplace=True)
+        data[col] = data[col].apply(to_decode)
+
+    for col in ['MT_LOYER', 'MT_CHRG', 'MT_PENS_DU']:
+        data[col].fillna(0, inplace=True)
+
+    return data
 
 
 def clean_data(data):
@@ -108,7 +140,7 @@ def categorie_data_labels(data, data_val):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     X_cat = []
     X_val_cat = []
@@ -148,7 +180,7 @@ def categorie_data_bin_train_test(data, data_val):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     for column in categorical:
         if column in X.columns:
@@ -192,9 +224,9 @@ def categorie_data_bin_train_test(data, data_val):
     return X_train, X_test, labels
 
 
-def categorie_data_bin_train(data):
-    """Traite les variables catégoriques des données en les binarisant (après avoir regroupé certaines modalités)
-    Retourne les données traitées, l'encodeur et les labels des colonnes
+def categorie_data_bin_train(data, var_cible):
+    """Binarise the categorical variables (after merging categories)
+    Returns the data, the encoder and the column labels
 
         :param pandas.Dataframe data:
             Data with some variables being categorical
@@ -205,26 +237,27 @@ def categorie_data_bin_train(data):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
     to_change = []
     merged_cat = {}
     for column in categorical:
         if column in X.columns:
             to_change.append(column)
             X.loc[:, column] = X[column].astype(str)
-            X, dico = regroupement(X, column, "Defaut_12_Mois_contagion")
+            X, dico = regroupement(X, column, var_cible)
             merged_cat[column] = dico
 
     discret_cat = {}
     for column in X.columns:
-        if column not in categorical and column != "Defaut_12_Mois_contagion":
+        if column not in categorical and column != var_cible :
             to_change.append(column)
             X.loc[:, column] = X[column].astype(np.float64)
-            X, binning = discretize_feature(X, column, "Defaut_12_Mois_contagion")
+            X, binning = discretize_feature(X, column, var_cible)
             discret_cat[column] = binning
 
-    if "Defaut_12_Mois_contagion" in X.columns:
-        X.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
+    if var_cible in X.columns:
+        X.drop([var_cible], axis=1, inplace=True)
 
     enc = OneHotEncoder(sparse=False, handle_unknown='ignore')
     X_cat = enc.fit_transform(X[to_change])
@@ -254,10 +287,8 @@ def categorie_data_bin_train(data):
 
 def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
     """
-    Traite les variables catégoriques des données de test en les binarisant en utilisant l'encodeur utilisé pour
-    binariser les données de train
-    Retourne les données traitées
-
+    Data treatment of the test data, using the method (merged categories, discretisation, OneHotEncoder) learned on the train data
+    Returns the treated data
     :param pandas.Dataframe data_val:
         Data with some variables being categorical
     :param sklearn.preprocessing.OneHotEncoder enc:
@@ -269,7 +300,8 @@ def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "segment"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
     to_change = []
     for column in categorical:
         if column in X_val.columns:
@@ -283,6 +315,75 @@ def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
             to_change.append(column)
             X_val.loc[:, column] = X_val[column].astype(np.float64)
             X_val = apply_discret(X_val, column, discret_cat[column])
+
+    X_val_cat = enc.transform(X_val[to_change])
+    X_val_cat = pd.DataFrame(X_val_cat)
+
+    X_val_num = X_val.drop(to_change, axis=1)
+    for column in X_val_num.columns:
+        col = X_val_num[column]
+        if col.dtypes not in ("int32", "int64", "float32", "float64"):
+            X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
+
+    # Need to reset the index for the concat to work well (when not same index)
+    X_val_cat = X_val_cat.reset_index(drop=True)
+    X_val_num = X_val_num.reset_index(drop=True)
+    X_test = pd.concat([X_val_num, X_val_cat], axis=1, ignore_index=True)
+    return X_test
+
+
+def bin_data_cate_train(data, var_cible):
+    X = data.copy()
+    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
+                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
+                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
+                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
+                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+    to_change = []
+    for column in categorical:
+        if column in X.columns:
+            to_change.append(column)
+            X.loc[:, column] = X[column].astype(str)
+    for column in X.columns:
+        if column not in categorical and column != var_cible :
+            X.loc[:, column] = X[column].astype(np.float64)
+    if var_cible in X.columns:
+        X.drop([var_cible], axis=1, inplace=True)
+    enc = OneHotEncoder(sparse=False, handle_unknown='ignore')
+    X_cat = enc.fit_transform(X[to_change])
+    X_cat = pd.DataFrame(X_cat)
+    X_num = X.drop(to_change, axis=1)
+    for column in X_num.columns:
+        col = X_num[column]
+        if col.dtypes not in ("int32", "int64", "float32", "float64"):
+            X_num.loc[:, column] = X_num[column].astype(np.int32)
+
+    # Need to reset the index for the concat to work well
+    X_cat = X_cat.reset_index(drop=True)
+    X_num = X_num.reset_index(drop=True)
+
+    X_train = pd.concat([X_num, X_cat], axis=1, ignore_index=True)
+    return X_train, enc
+
+
+def bin_data_cate_test(data_val, enc):
+    X_val = data_val.copy()
+    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
+                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
+                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
+                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
+                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+    to_change = []
+    for column in categorical:
+        if column in X_val.columns:
+            to_change.append(column)
+            X_val.loc[:, column] = X_val[column].astype(str)
+
+    for column in X_val.columns:
+        if column not in categorical:
+            X_val.loc[:, column] = X_val[column].astype(np.float64)
 
     X_val_cat = enc.transform(X_val[to_change])
     X_val_cat = pd.DataFrame(X_val_cat)
@@ -340,6 +441,10 @@ def traitement_val(data, enc, scaler, merged_cat, discret_cat):
             OneHotEncoder fitted on the training data
         :param sklearn.preprocessing.StandardScaler scaler:
             StandardScaler fitted on the training data
+        :param dict merged_cat:
+            Merged categories for each column
+        :param dict discret_cat:
+            Binning for the discretisation for each column
     """
     X_val = data.copy()
     if "Defaut_12_Mois_contagion" in X_val.columns:
@@ -362,7 +467,8 @@ def traitement_train(data):
     if "Defaut_12_Mois_contagion" in X.columns:
         X["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)], inplace=True)
     X = extreme_values(X, missing=False)
-    X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X)
+    # X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X, var_cible="Defaut_12_Mois_contagion")
+    X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X, var_cible="cible")
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
     return X, labels, enc, scaler, merged_cat, discret_cat
@@ -463,7 +569,7 @@ def green_clust(X, var, var_predite, num_clusters):
     return df, dico_regroupement
 
 
-def regroupement(X, var, var_predite, seuil=0.05):
+def regroupement(X, var, var_predite, seuil=0.2):
     """
     Chi2 independence algorithm to group modalities
 
@@ -474,7 +580,7 @@ def regroupement(X, var, var_predite, seuil=0.05):
     :param str var:
         Column we aim to predict
     :param float seuil:
-        Value for the p-value other which we merge modalities
+        Value for the p-value over which we merge modalities
      """
     X_grouped = X.copy()
 
@@ -489,7 +595,8 @@ def regroupement(X, var, var_predite, seuil=0.05):
     X_grouped[var] = X_grouped[var].astype(str)
     initial_categories = np.unique(X_grouped[var])
     p_value = 1
-    while p_value > seuil:
+    # We want a minimum of two categories, otherwise the variable becomes useless
+    while p_value > seuil and len(np.unique(X_grouped[var])) > 2:
         # Counts the number of 0/1 by modality
         freq_table = X_grouped.groupby([var, var_predite]).size().reset_index()
         # All the combinations of values
@@ -499,7 +606,7 @@ def regroupement(X, var, var_predite, seuil=0.05):
                                  freq_table.iloc[np.in1d(freq_table[var], pair[1]), 2]]) for pair in
                       liste_paires_modalities]
         p_value = max(liste_chi2)
-        if p_value > 0.05 and len(np.unique(X_grouped[var])) > 1:
+        if p_value > seuil and len(np.unique(X_grouped[var])) > 1:
             # Updates the modality to the new concatenated value
             X_grouped[var].iloc[
                 np.in1d(X_grouped[var], liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])] = \
@@ -517,7 +624,7 @@ def regroupement(X, var, var_predite, seuil=0.05):
         for cat in regrouped_cate.split(' - '):
             dico_regroupement[cat] = regrouped_cate
 
-    print("Feature " + var + " went from ", len(initial_categories), " to ", len(new_categories), " modalities")
+    # print("Feature " + var + " went from ", len(initial_categories), " to ", len(new_categories), " modalities")
 
     return X_grouped, dico_regroupement
 
@@ -536,7 +643,7 @@ def entropy(variable):
     return ent
 
 
-def stopping_criterion(cut_idx, target, ent):
+def stopping_criterion(cut_idx, target, ent, depth):
     """Decided whether we should cut target at cut_idx, knowing we imagine the new entropy to be"""
     n = len(target)
     target_entropy = entropy(target)
@@ -550,7 +657,8 @@ def stopping_criterion(cut_idx, target, ent):
                                 k1 * entropy(target[: cut_idx]) -
                                 k2 * entropy(target[cut_idx:])))
     cond = log(n - 1) / n + delta / n
-    if gain >= cond:
+    # We want at least one separation
+    if gain >= cond or depth==1 :
         return gain
     else:
         return None
@@ -597,9 +705,9 @@ def cut_points(x, y):
             return None
         cut_index = int(cut[0])
         current_entropy = cut[1]
-        # Checks whether it is worth to split
+        # Checks whether it is worth it to split
         ret = stopping_criterion(cut_index, np.array(y),
-                                 current_entropy)
+                                 current_entropy, depth)
         if ret is not None:
             return [cut_index, depth + 1]
         else:
@@ -618,7 +726,7 @@ def cut_points(x, y):
         cut_points = np.append(cut_points, low + ci)
         cut_points = cut_points.astype(int)
         cut_points.sort()
-        # We choose to have a maximum of 8 categories in total (2
+        # We choose to have a maximum of 8 categories in total
         if len(cut_points) > 2:
             return cut_points
         return (list(part(low, low + ci, cut_points, depth=depth)) +
@@ -641,6 +749,7 @@ def discretize_feature(X, var, var_predite):
     # Values at which to cut x
     x = X[var].to_numpy()
     x = x.copy()
+
     binning = cut_points(X[var].to_numpy(), X[var_predite].to_numpy())
 
     x_discrete = [1 for i in range(len(x))]
