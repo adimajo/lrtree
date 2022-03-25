@@ -83,7 +83,7 @@ def predict_proba(self, X, column_names=None):
             bloc = categorie_data_bin_test(bloc.rename(columns=column_names), treatment[liste_cla[i]]["enc"],
                                            treatment[liste_cla[i]]["merged_cat"],
                                            treatment[liste_cla[i]]["discret_cat"])
-        else :
+        else:
             bloc = bloc.add_prefix("par_")
         bloc_pred = logreg[i].predict_proba(bloc)
         k = 0

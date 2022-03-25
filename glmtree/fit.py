@@ -4,8 +4,6 @@ fit method for the Glmtree class
 import glmtree
 import numpy as np
 import pandas as pd
-
-pd.options.mode.chained_assignment = None  # default='warn'
 from joblib import Parallel, delayed
 from loguru import logger
 from sklearn.tree import DecisionTreeClassifier
@@ -16,22 +14,38 @@ from scripts.traitement_data import categorie_data_bin_train, categorie_data_bin
 from sklearn.preprocessing import OneHotEncoder
 from copy import deepcopy
 
+STOPPED_AT_ITERATION = "Stopped at iteration"
+
+pd.options.mode.chained_assignment = None
+
 
 class OneClassReg:
-    def __init__(self, *args, **kwargs):
+    """
+    One class logistic regression (e.g. when a leaf is pure)
+    """
+    def __init__(self):
         self._single_class_label = None
         self.n_features_in_ = None
         self.coef_ = None
 
-    def fit(self, X, y, sample_weight=None):
+    def fit(self, X, y):
+        """
+
+        """
         self._single_class_label = y.iloc[0]
         self.n_features_in_ = X.shape[1]
         return self
 
     def predict(self, X):
+        """
+
+        """
         return np.full(X.shape[0], self._single_class_label)
 
     def predict_proba(self, X):
+        """
+
+        """
         if self._single_class_label == 1:
             return np.full((X.shape[0], 2), [0, 1])
         else:
@@ -155,7 +169,7 @@ def calc_criterion(self, df, model_c_map, treatment=None, column_names=None):
                 if X_validate.shape[0] > 0:
                     y_pred = model.predict_proba(X_validate.to_numpy())
                     criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) - \
-                                model.n_features_in_
+                        model.n_features_in_
                 k = k + 1
         else:
             k = 0
@@ -171,7 +185,7 @@ def calc_criterion(self, df, model_c_map, treatment=None, column_names=None):
                                                      treatment[c_iter]["discret_cat"])
                 y_pred = model.predict_proba(X_pred.to_numpy())
                 criterion = criterion - 2 * log_loss(y_true, y_pred, normalize=False, labels=[0, 1]) - \
-                            model.n_features_in_
+                    model.n_features_in_
                 k = k + 1
 
     elif self.criterion == "bic":
@@ -192,7 +206,7 @@ def calc_criterion(self, df, model_c_map, treatment=None, column_names=None):
                 if X_validate.shape[0] > 0:
                     y_pred = model.predict_proba(X_validate.to_numpy())
                     criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1]) - \
-                                np.log(len(X_validate)) * model.n_features_in_
+                        np.log(len(X_validate)) * model.n_features_in_
                 k = k + 1
         else:
             k = 0
@@ -210,7 +224,7 @@ def calc_criterion(self, df, model_c_map, treatment=None, column_names=None):
                 criterion = criterion - 2 * log_loss(y_true, y_pred,
                                                      normalize=False,
                                                      labels=[0, 1]) - \
-                            np.log(len(X_pred)) * model.n_features_in_
+                    np.log(len(X_pred)) * model.n_features_in_
                 k = k + 1
 
     return criterion
@@ -261,9 +275,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
         Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
     """
 
-    data_treatment = self.data_treatment
-
-    if not data_treatment:
+    if not self.data_treatment:
         _check_args(X, y)
 
     self.n = len(y)
@@ -302,7 +314,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 models[c_iter] = LogisticRegression(penalty='l2', solver='saga', C=0.1, tol=1e-2, warm_start=False)
                 treatment[c_iter] = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
 
-            if data_treatment:
+            if self.data_treatment:
                 # Data without treatment (one hot on categorical variables), used for the tree
                 X_tree, enc_global = bin_data_cate_train(X.copy(), "y")
                 treatment["global"] = enc_global
@@ -311,7 +323,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
 
             # Start of main logic
             while i < self.max_iter and not stopping_criterion:
-                print(i)
+                logger.debug("Iteration", i)
                 logregs_c_hat = []
                 logregs_c_map = []
                 model_c_map = []
@@ -322,7 +334,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                     idx = df["c_hat"] == c_iter
                     train_data = df[idx & df.index.isin(self.train_rows)].drop(['c_map', 'c_hat'], axis=1)
 
-                    if data_treatment:
+                    if self.data_treatment:
                         # Discretization / merging categorical variables (and removes y)
                         train_data = train_data.rename(columns=column_names)
                         train_data, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(
@@ -347,10 +359,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
 
                     logregs_c_hat.append(logreg)
                     to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
-                    if data_treatment:
+                    if self.data_treatment:
                         # Applies the data treatment for this leaf
                         to_predict = to_predict.rename(columns=column_names)
-                        to_predict = categorie_data_bin_test(to_predict, treatment[c_iter]["enc"], treatment[c_iter]["merged_cat"],
+                        to_predict = categorie_data_bin_test(to_predict, treatment[c_iter]["enc"],
+                                                             treatment[c_iter]["merged_cat"],
                                                              treatment[c_iter]["discret_cat"])
                     predictions_log[:, c_iter] = logreg.predict(to_predict.to_numpy())
 
@@ -364,7 +377,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                     y = train_data['y']
                     X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
 
-                    if data_treatment:
+                    if self.data_treatment:
                         # Applying the data treatment (discretization, merging categories) for this segment
                         X = X.rename(columns=column_names)
                         X = categorie_data_bin_test(X, treatment[c_iter]["enc"],
@@ -390,17 +403,19 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                     if self.criterion == "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.005:
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
                     if self.criterion != "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.01 * abs(self.best_criterion):
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
 
-                    best_treat={}
-                    if data_treatment:
-                        best_treat={"global" : treatment["global"]}
+                    best_treat = {}
+                    if self.data_treatment:
+                        best_treat = {"global": treatment["global"]}
                         for c_iter in range(df["c_hat"].nunique()):
-                            best_treat[c_iter]={"enc" : deepcopy(treatment[c_iter]["enc"]), "merged_cat" : deepcopy(treatment[c_iter]["merged_cat"]) , "discret_cat" : deepcopy(treatment[c_iter]["discret_cat"])}
+                            best_treat[c_iter] = {"enc": deepcopy(treatment[c_iter]["enc"]),
+                                                  "merged_cat": deepcopy(treatment[c_iter]["merged_cat"]),
+                                                  "discret_cat": deepcopy(treatment[c_iter]["discret_cat"])}
                     self.best_treatment = deepcopy(best_treat)
                     self.best_logreg = logregs_c_map
                     self.best_link = link
@@ -409,7 +424,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 # Stopping when we reach a tree with only one leaf
                 if i > 0 and link == []:
                     stopping_criterion = True
-                    print("Stopped at iteration", i, "the model is just a logistic regression with no tree.")
+                    logger.info(STOPPED_AT_ITERATION, i, "the model is just a logistic regression with no tree.")
 
                 # Stopping when the criterion doesn't vary anymore
                 if i >= 20:
@@ -417,10 +432,10 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                     variation = np.var(last_ones) ** 0.5
                     if self.criterion == "gini" and variation < 0.0001:
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
                     if self.criterion != "gini" and variation < 0.01 * abs(self.best_criterion):
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
 
                 # Getting p(c_hat | x)
                 if df["c_hat"].nunique() > 1:
@@ -458,7 +473,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 tree_pred = link.predict_proba(X_tree)
                 y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
                 masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) + \
-                                         np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
+                    np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
                 matrix = np.multiply(tree_pred, masked_predictions_log)
                 row_sums = matrix.sum(axis=1)
                 p = matrix / row_sums[:, np.newaxis]
@@ -470,7 +485,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 i = i + 1
 
     elif self.algo == 'EM':
-        for k in range(nb_init):
+        for _ in range(nb_init):
             # Random initialisation
             stopping_criterion = False
             i = 0
@@ -530,7 +545,7 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                 y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
                 # p_theta_y|x
                 masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) + \
-                                         np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
+                    np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
                 # p_beta_c|x * p_theta_y|x
                 matrix = np.multiply(link.predict_proba(X), masked_predictions_log)
                 row_sums = matrix.sum(axis=1)
@@ -565,11 +580,11 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                     if self.criterion == "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.005:
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
                     if self.criterion != "gini" and i >= 30 and abs(
                             self.criterion_iter[i] - self.best_criterion) < 0.01 * abs(self.best_criterion):
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
 
                     self.best_logreg = logregs_c_map
                     self.best_link = link
@@ -581,10 +596,10 @@ def fit(self, X, y, nb_init=1, tree_depth=10, min_impurity_decrease=0.0, optimal
                     variation = np.var(last_ones) ** 0.5
                     if self.criterion == "gini" and variation < 0.005:
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
                     if self.criterion != "gini" and variation < 0.01 * abs(self.best_criterion):
                         stopping_criterion = True
-                        print("Stopped at iteration", i)
+                        logger.info(STOPPED_AT_ITERATION, i)
 
                 i = i + 1
 

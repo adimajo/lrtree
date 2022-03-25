@@ -164,7 +164,8 @@ class Glmtree:
             :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
                                     Sum of values should be less than 1. Defaults to (0.7, 0.3)
             :param int class_num:   Number of initial segments. Defaults to 10.
-            :param bool data_treatment:  Whether or not we want the data to be discretized/merged categories in each leaf.
+            :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each
+                                        leaf.
         """
         _check_input_args(algo, validation, test, ratios, criterion)
 
