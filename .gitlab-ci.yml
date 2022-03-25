@@ -200,12 +200,13 @@ promote_staging:
     CREDS: "${BOOT_ARTI_USER}:${BOOT_ARTI_PASSWORD}"
     SOURCE_REPO: "${BOOT_ARTI_PYPI_SCRATCH_REGISTRY}"
     TARGET_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
+    IMAGE: glmtree
   script:
     - . ./build.env
     - 'echo SOURCE REPOSITORY : ${SOURCE_REPO}'
     - 'echo TARGET REPOSITORY : ${TARGET_REPO}'
     - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
-    - if [[ $(curl -S -k -u ${CREDS} -XPOST https://${BOOT_ARTI_REGISTRY}/api/copy/${SOURCE_REPO}/bert-encoder-mig?to=/${TARGET_REPO} | jq --raw-output '.messages[0].level') = "INFO" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
+    - if [[ $(curl -S -k -u ${CREDS} -XPOST https://${BOOT_ARTI_REGISTRY}/api/copy/${SOURCE_REPO}/${IMAGE}?to=/${TARGET_REPO} | jq --raw-output '.messages[0].level') = "INFO" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
   only:
    - master
 
@@ -217,7 +218,7 @@ promote_stable:
   variables:
     SOURCE_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
     TARGET_REPO: "${BOOT_ARTI_PYPI_STABLE_REGISTRY}"
-    IMAGE: bert-encoder-mig
+    IMAGE: glmtree
   script:
     - . ./build.env
 #    - apk update
