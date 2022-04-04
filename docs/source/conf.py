@@ -24,8 +24,8 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'lrtree'
-copyright = '2020, Adrien Ehrhardt, Dmitry Gaynullin'
-author = 'Adrien Ehrhardt, Dmitry Gaynullin'
+copyright = '2020, Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar'
+author = 'Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar'
 
 
 # The full version, including alpha/beta/rc tags
@@ -95,7 +95,6 @@ exclude_patterns = []
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-#
 html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -136,7 +135,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'lrtree.tex', 'lrtree Documentation',
-     'Adrien Ehrhardt, Dmitry Gaynullin', 'manual'),
+     'Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar', 'manual'),
 ]
 
 # -- Options for manual page output ------------------------------------------

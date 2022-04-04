@@ -1,10 +1,15 @@
 """
 generate_data module for the Lrtree class: generating some data to test the algorithm on.
+
+.. autosummary::
+    :toctree:
+
+    generate_data
 """
 import numpy as np
 
 
-def generate_data(n: int, d: int, theta: np.array = None):
+def generate_data(n: int, d: int, theta: np.ndarray = None):
     """
     Generates some toy continuous data that gets discretized, and a label
     is drawn from a logistic regression given the discretized features.

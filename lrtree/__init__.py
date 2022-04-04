@@ -4,11 +4,6 @@
     :toctree:
 
     Lrtree
-    Lrtree.fit
-    Lrtree.predict
-    Lrtree.check_is_fitted
-    Lrtree.generate_data
-    NotFittedError
 """
 __version__ = "1.0.0"
 
@@ -224,7 +219,7 @@ class Lrtree:
 
     # Imported methods
     from .fit import fit
-    from .predict import predict
     from .generate_data import generate_data
+    from .predict import predict
     from .predict import predict_proba
     from .predict import precision

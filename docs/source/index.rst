@@ -7,14 +7,14 @@
    :maxdepth: 2
    :caption: Contents:
 
-Welcome to :mod:`glmtree`'s documentation!
+Welcome to :mod:`lrtree`'s documentation!
 ==========================================
 
 .. autosummary::
    :toctree: _autosummary
    :recursive:
 
-   glmtree
+   lrtree
 
 Indices and tables
 ==================

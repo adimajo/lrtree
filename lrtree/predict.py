@@ -1,5 +1,12 @@
 """
 Predict, predict_proba and precision methods for the Lrtree class
+
+.. autosummary::
+    :toctree:
+
+    predict
+    predict_proba
+    precision
 """
 import pandas as pd
 import numpy as np

@@ -1,5 +1,10 @@
 """
-fit method for the Lrtree class
+fit module for the Lrtree class
+
+.. autosummary::
+    :toctree:
+
+    fit
 """
 import lrtree
 import numpy as np
@@ -104,7 +109,7 @@ def _dataset_split(self):
         self.train_rows = np.random.choice(self.n, self.n, replace=False)
 
 
-def calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict = None) -> float:
+def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict = None) -> float:
     """
     Computes the criterion for this model.
 
@@ -342,7 +347,7 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
                     model_c_map.append(model)
 
                 # Getting the total criterion, for this model (tree + reg) proposition
-                self.criterion_iter[i] = calc_criterion(self, df, model_c_map, treatment)
+                self.criterion_iter[i] = _calc_criterion(self, df, model_c_map, treatment)
                 # Best model yet
                 if self.criterion_iter[i] > self.best_criterion:
                     # Stopping when the criterion doesn't really get better anymore
@@ -505,7 +510,7 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
                     model_c_map.append(model)
 
                 # Getting the total criterion
-                self.criterion_iter[i] = calc_criterion(self, df, model_c_map)
+                self.criterion_iter[i] = _calc_criterion(self, df, model_c_map)
                 # Best results
                 if self.criterion_iter[i] > self.best_criterion:
                     # Stopping when the criterion doesn't really get better anymore
