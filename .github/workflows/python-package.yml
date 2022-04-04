@@ -43,11 +43,29 @@ jobs:
       run: |
         pipenv run pip install bandit
         pipenv run bandit -r glmtree
-    - name: Document
+    - name: Build documentation
       run: |
         cd docs
-        pipenv run make html
+        PIPENV_PIPFILE=../Pipfile pipenv run make html
         cd ..
+    - name: Upload documentation
+      run: |
+        export LATEST_COMMITER_EMAIL=`git --no-pager log -1 -s --format="%ae"`
+        echo $LATEST_COMMITER_EMAIL
+        git config --global user.email "$LATEST_COMMITTER_EMAIL"
+        git config --global user.name "$GITHUB_ACTOR"
+        git add -f docs/build/html
+        git commit -am "Rollout version ${{ env.APPLICATION_TAG_VERSION }}"
+        git checkout pages
+        rm -rf docs
+        mkdir docs_temp
+        git checkout master -- docs README.md
+        cp -rf docs/build/html/* docs_temp/
+        rm -rf docs
+        mv docs_temp docs
+        git add docs
+        if ! git diff-index --quiet HEAD -- ; then git commit -am "Rollout version ${{ env.APPLICATION_TAG_VERSION }}" && git push origin pages --force; else echo "Nothing to push"; fi
+        git checkout master
     - name: Build and check package
       run: |
         pipenv run pipenv_to_requirements
