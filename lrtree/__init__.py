@@ -3,11 +3,11 @@
 .. autosummary::
     :toctree:
 
-    Glmtree
-    Glmtree.fit
-    Glmtree.predict
-    Glmtree.check_is_fitted
-    Glmtree.generate_data
+    Lrtree
+    Lrtree.fit
+    Lrtree.predict
+    Lrtree.check_is_fitted
+    Lrtree.generate_data
     NotFittedError
 """
 __version__ = "1.0.0"
@@ -30,7 +30,12 @@ def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion
     Checks input arguments :code: algo, :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`
     """
     # The algorithm should be one the ones in the list
-    if algo not in ("SEM", "EM"):
+    if type(algo) != str:
+        msg = "algo must be a string"
+        logger.error(msg)
+        raise ValueError(msg)
+
+    if algo.lower() not in ("sem", "em"):
         msg = "Algorithm " + algo + " is not supported"
         logger.error(msg)
         raise ValueError(msg)
@@ -59,14 +64,14 @@ def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion
         raise ValueError(msg)
 
     if sum(ratios) >= 1:
-        msg = "Dataset split ratios should be positive numbers with the sum less when 1"
+        msg = "Dataset split ratios should be positive numbers with the sum less then 1"
         logger.error(msg)
         raise ValueError(msg)
 
     if validation and test:
         if len(ratios) != 2:
             msg = ("With validation and test, dataset split ratios should be 2 "
-                   "positive numbers with the sum less when 1")
+                   "positive numbers with the sum less then 1")
             logger.error(msg)
             raise ValueError(msg)
     elif validation or test:
@@ -87,7 +92,7 @@ def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion
         raise ValueError(msg)
 
 
-class Glmtree:
+class Lrtree:
     """
     The class implements a supervised method based in logistic trees
 
@@ -140,7 +145,7 @@ class Glmtree:
         """
         Initializes self by checking if its arguments are appropriately specified.
 
-            :param str algo:        The algorithm to be used to fit the Glmtree: "SEM" for a stochastic approach or
+            :param str algo:        The algorithm to be used to fit the Lrtree: "SEM" for a stochastic approach or
                                     "EM" for a non stochastic expectation/maximization algorithm.
             :param bool test:       Boolean specifying if a test set is required.
                                     If True, the provided data is split to provide 20%
@@ -168,6 +173,8 @@ class Glmtree:
                                         leaf.
         """
         _check_input_args(algo, validation, test, ratios, criterion)
+        self.criterion = criterion.lower()
+        self.algo = algo.lower()
 
         if not validation and criterion == "gini":
             msg = "Using Gini index on training set might yield an overfitted model."
@@ -178,14 +185,13 @@ class Glmtree:
                   "instead of AIC/BIC."
             logger.warning(msg)
 
-        self.algo = algo
         self.test = test
         self.validation = validation
-        self.criterion = criterion
         self.max_iter = max_iter
         self.class_num = class_num
         self.ratios = ratios
         self.data_treatment = data_treatment
+        self.column_names = None
 
         # Init data
         self.train_rows, self.validate_rows, self.test_rows = None, None, None
@@ -207,18 +213,18 @@ class Glmtree:
         typically in their own predict / transform methods.
         """
         try:
-            for logreg in self.best_logreg:
+            for logreg in self.best_logreg:  # pragma: no cover
                 if isinstance(logreg, sk.linear_model.LogisticRegression):
                     sk.utils.validation.check_is_fitted(logreg)
-            if isinstance(self.best_link, sk.tree.DecisionTreeClassifier):
+            if isinstance(self.best_link, sk.tree.DecisionTreeClassifier):  # pragma: no cover
                 sk.utils.validation.check_is_fitted(self.best_link)
-        except sk.exceptions.NotFittedError as e:
+        except (sk.exceptions.NotFittedError, TypeError) as e:
             raise NotFittedError(str(e) + " If you did call fit, try increasing iter: "
                                           "it means it did not find a better solution than the random initialization.")
 
     # Imported methods
     from .fit import fit
     from .predict import predict
-    from .data_test import generate_data
+    from .generate_data import generate_data
     from .predict import predict_proba
     from .predict import precision

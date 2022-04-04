@@ -161,7 +161,7 @@ The trained model consists of a fitted `sklearn.tree.DecisionTreeClassifier` cla
 
 The snippet to train the model and make a prediction:
 ```python
-from glmtree import *
+from lrtree import *
 
 model = Glmtree(criterion="bic", ratios=(0.7,), class_num=2, max_iter=100)
 

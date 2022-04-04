@@ -1,5 +1,5 @@
 """
-Predict, predict_proba and precision methods for the Glmtree class
+Predict, predict_proba and precision methods for the Lrtree class
 """
 import pandas as pd
 import numpy as np
@@ -7,15 +7,16 @@ from copy import deepcopy
 from scripts.traitement_data import bin_data_cate_test, categorie_data_bin_test
 
 
-def predict(self, X, column_names=None):
+def predict(self, X):
     """
-    Predicts the labels for new values using previously fitted glmtree object
+    Predicts the labels for new values using previously fitted lrtree object
 
     :param numpy.ndarray X:
         array_like of shape (n_samples, n_features)
         Vector to be scored, where `n_samples` is the number of samples and
         `n_features` is the number of features
     """
+    self.check_is_fitted()
     # List of models for each class
     link = self.best_link
     logreg = self.best_logreg
@@ -38,7 +39,7 @@ def predict(self, X, column_names=None):
         bloc = bloc.add_prefix("par_")
         if self.data_treatment:
             treatment = self.best_treatment
-            bloc = categorie_data_bin_test(bloc.rename(columns=column_names), treatment[liste_cla[i]]["enc"],
+            bloc = categorie_data_bin_test(bloc.rename(columns=self.column_names), treatment[liste_cla[i]]["enc"],
                                            treatment[liste_cla[i]]["merged_cat"],
                                            treatment[liste_cla[i]]["discret_cat"])
         bloc_pred = logreg[i].predict(bloc)
@@ -51,15 +52,16 @@ def predict(self, X, column_names=None):
     return X_df["pred"].to_numpy()
 
 
-def predict_proba(self, X, column_names=None):
+def predict_proba(self, X):
     """
-    Predicts the probability of the labels for new values using previously fitted glmtree object
+    Predicts the probability of the labels for new values using previously fitted lrtree object
 
     :param numpy.ndarray X:
         array_like of shape (n_samples, n_features)
         Vector to be scored, where `n_samples` is the number of samples and
         `n_features` is the number of features
     """
+    self.check_is_fitted()
     # List of models for each class
     link = self.best_link
     logreg = self.best_logreg
@@ -80,7 +82,7 @@ def predict_proba(self, X, column_names=None):
         bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
         if self.data_treatment:
             treatment = self.best_treatment
-            bloc = categorie_data_bin_test(bloc.rename(columns=column_names), treatment[liste_cla[i]]["enc"],
+            bloc = categorie_data_bin_test(bloc.rename(columns=self.column_names), treatment[liste_cla[i]]["enc"],
                                            treatment[liste_cla[i]]["merged_cat"],
                                            treatment[liste_cla[i]]["discret_cat"])
         else:
@@ -95,8 +97,10 @@ def predict_proba(self, X, column_names=None):
     return X_df["pred"].to_numpy()
 
 
-def precision(self, X_test, y_test, column_names=None):
-    """Scores the precision of the prediction on the test set
+def precision(self, X_test, y_test):
+    """
+    Scores the precision of the prediction on the test set
+
     :param numpy.ndarray X_test:
         array_like of shape (n_samples, n_features)
         Vector used to predict values of y
@@ -110,7 +114,7 @@ def precision(self, X_test, y_test, column_names=None):
         msg = "X_test and y_test need to have the same size"
         raise ValueError(msg)
 
-    prediction = self.predict(X_test, column_names)
+    prediction = self.predict(X_test)
     diff = np.count_nonzero(prediction - y_test)
     precision = 1 - diff / len(X_test)
     return precision

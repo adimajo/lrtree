@@ -15,15 +15,15 @@ import os
 import codecs
 import re
 
-there = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'glmtree'))
+there = os.path.abspath(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'lrtree'))
 
-sys.path.insert(0, os.path.abspath('../../glmtree'))
+sys.path.insert(0, os.path.abspath('../../lrtree'))
 sys.path.insert(0, os.path.abspath('../..'))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'glmtree'
+project = 'lrtree'
 copyright = '2020, Adrien Ehrhardt, Dmitry Gaynullin'
 author = 'Adrien Ehrhardt, Dmitry Gaynullin'
 
@@ -109,7 +109,7 @@ master_doc = 'index'
 # -- Options for HTMLHelp output ---------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'glmtreedoc'
+htmlhelp_basename = 'lrtreedoc'
 
 # -- Options for LaTeX output ------------------------------------------------
 
@@ -135,7 +135,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'glmtree.tex', 'glmtree Documentation',
+    (master_doc, 'lrtree.tex', 'lrtree Documentation',
      'Adrien Ehrhardt, Dmitry Gaynullin', 'manual'),
 ]
 
@@ -144,7 +144,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'glmtree', 'glmtree Documentation',
+    (master_doc, 'lrtree', 'lrtree Documentation',
      [author], 1)
 ]
 
@@ -155,8 +155,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'glmtree', 'glmdisc Documentation',
-     author, 'glmtree', 'One line description of project.',
+    (master_doc, 'lrtree', 'lrtree Documentation',
+     author, 'lrtree', 'One line description of project.',
      'Miscellaneous'),
 ]
 

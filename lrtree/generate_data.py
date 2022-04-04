@@ -1,5 +1,5 @@
 """
-data_test module for the Glmtree class: generating some data to test the algorithm on.
+generate_data module for the Lrtree class: generating some data to test the algorithm on.
 """
 import numpy as np
 

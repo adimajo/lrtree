@@ -1,5 +1,5 @@
-from glmtree.data_test import generate_data
-from glmtree.fit import fit_parallelized
+from lrtree.data_test import generate_data
+from lrtree.fit import _fit_parallelized
 from copy import deepcopy
 import numpy as np
 from sklearn import tree
@@ -97,7 +97,7 @@ from sklearn.metrics import roc_auc_score
 X, y, theta, BIC_oracle = generate_data(10000, 3)
 X_test, y_test, _, _ = generate_data(10000, 3)
 
-model = fit_parallelized(X, y, algo='SEM', criterion="aic", nb_init=10, tree_depth=2, class_num=4, max_iter=100)
+model = _fit_parallelized(X, y, algo='SEM', criterion="aic", nb_init=10, tree_depth=2, class_num=4, max_iter=100)
 text_representation = tree.export_text(model.best_link)
 print(text_representation)
 # tree.plot_tree(model.best_link)

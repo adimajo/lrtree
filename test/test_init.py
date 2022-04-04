@@ -1,94 +1,94 @@
 import pytest
-import glmtree
+import lrtree
 
 
 def test_init():
-    glmtree_instance = glmtree.Glmtree(validation=True, criterion="gini")
-    assert not glmtree_instance.test
-    assert glmtree_instance.validation
-    assert glmtree_instance.criterion == "gini"
-    assert glmtree_instance.ratios == (0.7,)
-    assert glmtree_instance.class_num == 10
-    assert glmtree_instance.max_iter == 100
-    assert glmtree_instance.train_rows is None
-    assert glmtree_instance.validate_rows is None
-    assert glmtree_instance.test_rows is None
-    assert glmtree_instance.n == 0
+    lrtree_instance = lrtree.Lrtree(validation=True, criterion="gini")
+    assert not lrtree_instance.test
+    assert lrtree_instance.validation
+    assert lrtree_instance.criterion == "gini"
+    assert lrtree_instance.ratios == (0.7,)
+    assert lrtree_instance.class_num == 10
+    assert lrtree_instance.max_iter == 100
+    assert lrtree_instance.train_rows is None
+    assert lrtree_instance.validate_rows is None
+    assert lrtree_instance.test_rows is None
+    assert lrtree_instance.n == 0
 
 
 def test_test_arg():
-    glmtree.Glmtree(test=True)
-    glmtree.Glmtree(test=False)
+    lrtree.Lrtree(test=True)
+    lrtree.Lrtree(test=False)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(test="string")
+        lrtree.Lrtree(test="string")
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(test=12)
+        lrtree.Lrtree(test=12)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(test=0.1)
+        lrtree.Lrtree(test=0.1)
 
 
 def test_validation_arg():
-    glmtree.Glmtree(validation=True)
-    glmtree.Glmtree(validation=False)
+    lrtree.Lrtree(validation=True)
+    lrtree.Lrtree(validation=False)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(validation="string")
+        lrtree.Lrtree(validation="string")
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(validation=12)
+        lrtree.Lrtree(validation=12)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(validation=0.1)
+        lrtree.Lrtree(validation=0.1)
 
 
 def test_ratios():
-    glmtree.Glmtree(ratios=(0.1, 0.5), validation=True, test=True)
-    glmtree.Glmtree(ratios=(0.1,), validation=True, test=False)
-    glmtree.Glmtree(ratios=(0.1,), validation=False, test=True)
-    glmtree.Glmtree(ratios=(0.1,), validation=False, test=False)
-    glmtree.Glmtree(validation=False, test=False)
+    lrtree.Lrtree(ratios=(0.1, 0.5), validation=True, test=True)
+    lrtree.Lrtree(ratios=(0.1,), validation=True, test=False)
+    lrtree.Lrtree(ratios=(0.1,), validation=False, test=True)
+    lrtree.Lrtree(ratios=(0.1,), validation=False, test=False)
+    lrtree.Lrtree(validation=False, test=False)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(ratios=(0.1,), validation=True, test=True)
+        lrtree.Lrtree(ratios=(0.1,), validation=True, test=True)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(ratios=0.1)
+        lrtree.Lrtree(ratios=0.1)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(ratios=0.1)
+        lrtree.Lrtree(ratios=0.1)
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(ratios=0.1)
+        lrtree.Lrtree(ratios=0.1)
 
 
 def test_criterion():
-    glmtree.Glmtree(criterion="aic")
-    glmtree.Glmtree(criterion="bic")
-    glmtree.Glmtree(criterion="gini")
+    lrtree.Lrtree(criterion="aic")
+    lrtree.Lrtree(criterion="bic")
+    lrtree.Lrtree(criterion="gini")
 
     with pytest.raises(ValueError):
-        glmtree.Glmtree(criterion="wrong criterion")
+        lrtree.Lrtree(criterion="wrong criterion")
 
 
 def test_gini_penalized(caplog):
-    glmtree.Glmtree(validation=False,
+    lrtree.Lrtree(validation=False,
                     test=True,
                     criterion="gini")
     assert caplog.records[0].message == "Using Gini index on training set might yield an overfitted model."
 
 
 def test_validation_criterion(caplog):
-    glmtree.Glmtree(validation=True,
+    lrtree.Lrtree(validation=True,
                     criterion="aic")
 
     assert caplog.records[0].message == ("No need to penalize the log-likelihood when a validation set is used. Using "
                                          "log-likelihood "
                                          "instead of AIC/BIC.")
 
-    glmtree.Glmtree(validation=True,
+    lrtree.Lrtree(validation=True,
                     criterion="bic")
 
     assert caplog.records[0].message == (

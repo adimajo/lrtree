@@ -46,7 +46,7 @@ lint:
   <<: *common_tag
   <<: *common_python
   script:
-    - cd glmtree
+    - cd lrtree
     - pip install flake8
     # stop the build if there are Python syntax errors or undefined names
     - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -58,7 +58,7 @@ lint:
     changes:
       - .gitlab-ci.yml
       - Pipfile
-      - glmtree/**/*
+      - lrtree/**/*
 
 test:
   stage: test
@@ -71,7 +71,7 @@ test:
   script:
     - pip install pipenv==2021.5.29
     - pipenv install -d --skip-lock
-    - pipenv run coverage run --source glmtree/ -m pytest
+    - pipenv run coverage run --source lrtree/ -m pytest
     - pipenv run coverage report
     - pipenv run coverage xml
   only:
@@ -80,7 +80,7 @@ test:
     changes:
       - .gitlab-ci.yml
       - Pipfile
-      - glmtree/**/*
+      - lrtree/**/*
       - tests/**/*
 
 security:
@@ -89,7 +89,7 @@ security:
   <<: *common_tag
   script:
     - pip install bandit
-    - bandit -r glmtree
+    - bandit -r lrtree
 
 install:
   stage: install
@@ -103,7 +103,7 @@ install:
   script:
     - pip install pipenv==2021.5.29
     - pipenv install
-    - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import glmtree; print(glmtree.__version__)'` >> build.env
+    - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'` >> build.env
   only:
     - master
 
@@ -167,7 +167,7 @@ document:
       - branches
     changes:
       - .gitlab-ci.yml
-      - glmtree/**/*
+      - lrtree/**/*
       - docs/**/*
 
 deploy:
@@ -200,7 +200,7 @@ promote_staging:
     CREDS: "${BOOT_ARTI_USER}:${BOOT_ARTI_PASSWORD}"
     SOURCE_REPO: "${BOOT_ARTI_PYPI_SCRATCH_REGISTRY}"
     TARGET_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
-    IMAGE: glmtree
+    IMAGE: lrtree
   script:
     - . ./build.env
     - 'echo SOURCE REPOSITORY : ${SOURCE_REPO}'
@@ -218,7 +218,7 @@ promote_stable:
   variables:
     SOURCE_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
     TARGET_REPO: "${BOOT_ARTI_PYPI_STABLE_REGISTRY}"
-    IMAGE: glmtree
+    IMAGE: lrtree
   script:
     - . ./build.env
 #    - apk update

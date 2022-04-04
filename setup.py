@@ -21,9 +21,9 @@ with open('requirements.txt') as fp:
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-setup(name='glmtree',
-      version=find_version("glmtree", "__init__.py"),
-      description='glmtree: logistic regression trees',
+setup(name='lrtree',
+      version=find_version("lrtree", "__init__.py"),
+      description='lrtree: logistic regression trees',
       long_description=long_description,
       long_description_content_type="text/markdown",
       url=None,
