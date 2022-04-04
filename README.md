@@ -1,20 +1,20 @@
 [![PyPI version](https://badge.fury.io/py/lrtree.svg)](https://badge.fury.io/py/lrtree)
-[![PyPI pyversions](https://img.shields.io/pypi/pyversions/glmtree.svg)](https://pypi.python.org/pypi/glmtree/)
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/lrtree.svg)](https://pypi.python.org/pypi/lrtree/)
 [![PyPi Downloads](https://img.shields.io/pypi/dm/lrtree)](https://img.shields.io/pypi/dm/lrtree)
-[![Build Status](https://travis-ci.org/adimajo/glmtree_python.svg?branch=master)](https://travis-ci.org/adimajo/glmtree_python)
-![Python package](https://github.com/adimajo/glmtree_python/workflows/Python%20package/badge.svg)
-[![codecov](https://codecov.io/gh/adimajo/glmtree_python/branch/master/graph/badge.svg)](https://codecov.io/gh/adimajo/glmtree_python)
+[![Build Status](https://travis-ci.org/adimajo/lrtree.svg?branch=master)](https://travis-ci.org/adimajo/lrtree)
+![Python package](https://github.com/adimajo/lrtree/workflows/Python%20package/badge.svg)
+[![codecov](https://codecov.io/gh/adimajo/lrtree/branch/master/graph/badge.svg)](https://codecov.io/gh/adimajo/lrtree)
 
 # Logistic regression trees
 
 Table of Contents
 -----------------
 
-* [Documentation](https://adimajo.github.io/glmtree_python)
+* [Documentation](https://adimajo.github.io/lrtree)
 * [Installation instructions](#-installing-the-package)
 * [Theory](#-use-case-example)
 * [Some examples](#-the-lrtree-package)
-* [Open an issue](https://github.com/adimajo/glmtree_python/issues/new/choose)
+* [Open an issue](https://github.com/adimajo/lrtree/issues/new/choose)
 * [References](#-references)
 * [Contribute](#-contribute)
 
@@ -39,13 +39,13 @@ This code is supported on Python 3.7, 3.8, 3.9.
 If `git` is installed on your machine, you can use:
 
 ```PowerShell
-pipenv install git+https://github.com/adimajo/glmtree_python.git
+pipenv install git+https://github.com/adimajo/lrtree.git
 ```
 
 If `git` is not installed, you can also use:
 
 ```PowerShell
-pipenv install --upgrade https://github.com/adimajo/glmtree_python/archive/master.tar.gz
+pipenv install --upgrade https://github.com/adimajo/lrtree/archive/master.tar.gz
 ```
 
 #### Installing through the `pip` command
@@ -83,6 +83,8 @@ Over the years, I've found [CNTLM](http://cntlm.sourceforge.net/) to be a great 
 * [Vincent Vandewalle](https://sites.google.com/site/vvandewa/)
 * [Philippe Heinrich](http://math.univ-lille1.fr/~heinrich/)
 * [Christophe Biernacki](http://math.univ-lille1.fr/~biernack/)
+* Dmitri Gaynullin
+* Elise Bayraktar
 
 ## License
 
@@ -103,7 +105,7 @@ Ehrhardt, A. (2019), [Formalization and study of statistical problems in Credit 
 You can clone this project using:
 
 ```PowerShell
-git clone https://github.com/adimajo/glmdisc_python.git
+git clone https://github.com/adimajo/lrtree.git
 ```
 
 You can install all dependencies, including development dependencies, using (note that 
@@ -114,9 +116,6 @@ pipenv install -d
 ```
 
 You can build the documentation by going into the `docs` directory and typing `make html`.
-
-NOTE: you need to have a separate folder named `glmdisc_python_docs` in the same directory as this repository,
-as it will build the docs there so as to allow me to push this other directory as a separate `gh-pages` branch.
 
 You can run the tests by typing `coverage run -m pytest`, which relies on packages 
 [coverage](https://coverage.readthedocs.io/en/coverage-5.2/) and [pytest](https://docs.pytest.org/en/latest/).
@@ -129,7 +128,7 @@ install all versions you want to test (see [tox.ini](tox.ini)), e.g. with `pyenv
 The project uses `pipenv`. [An interesting resource](https://realpython.com/pipenv-guide/).
 
 To download all the project dependencies in order to then port them to a machine that had limited access to the internet, you must use the command
-`pipenv lock -r> requirements.txt` which will transform the `Pipfile` into a `requirements.txt`.
+`pipenv lock -r > requirements.txt` which will transform the `Pipfile` into a `requirements.txt`.
 
 ## Installation
 To install a virtual environment as well as all the necessary dependencies, you must use the `pipenv install` command for production use 
@@ -161,9 +160,9 @@ The trained model consists of a fitted `sklearn.tree.DecisionTreeClassifier` cla
 
 The snippet to train the model and make a prediction:
 ```python
-from lrtree import *
+from lrtree import Lrtree
 
-model = Glmtree(criterion="bic", ratios=(0.7,), class_num=2, max_iter=100)
+model = Lrtree(criterion="bic", ratios=(0.7,), class_num=2, max_iter=100)
 
 # Fitting the model
 model.fit(X_train, y_train)
