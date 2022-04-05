@@ -31,7 +31,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pipenv
         pipenv install --dev
-        export APPLICATION_TAG_VERSION=`python -c 'import whiteapp; print(whiteapp.__version__)'`
+        export APPLICATION_TAG_VERSION=`python -c 'import lrtree; print(lrtree.__version__)'`
         echo "APPLICATION_TAG_VERSION=$APPLICATION_TAG_VERSION" >> $GITHUB_ENV
     - name: Lint with flake8
       run: |
@@ -67,6 +67,7 @@ jobs:
         git checkout master -- docs README.md
         cp -rf docs/build/html/* .
         rm -rf docs
+        touch .nojekyll
         git add --all
         if ! git diff-index --quiet HEAD -- ; then git commit -am "Rollout version ${{ env.APPLICATION_TAG_VERSION }}" && git push origin pages --force; else echo "Nothing to push"; fi
         git checkout master
