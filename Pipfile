@@ -14,11 +14,11 @@ tikzplotlib = "*"
 keras = "*"
 twine = "*"
 pipenv_to_requirements = "*"
+vertica-python = "*"
+verticapy = "*"
 
 [packages]
 numpy = "*"
 pandas = "*"
 loguru = "*"
 scikit-learn = ">=1.0"
-vertica-python = "*"
-verticapy = "*"

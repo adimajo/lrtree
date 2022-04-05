@@ -18,6 +18,9 @@ def find_version(*file_paths):
 with open('requirements.txt') as fp:
     install_requires = [x.split("/")[-1] for x in fp.read().splitlines()[1:]]
 
+with open('requirements-dev.txt') as fp:
+    install_requires_dev = [x.split("/")[-1] for x in fp.read().splitlines()[1:]]
+
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
@@ -32,6 +35,7 @@ setup(name='lrtree',
       author_email='Groupe-recherche-operationnelle.GRO@credit-agricole-sa.fr',
       install_requires=install_requires,
       test_suite="pytest-runner",
+      test_requires=install_requires_dev,
       classifiers=[
           "Programming Language :: Python :: 3",
           "Operating System :: OS Independent",
