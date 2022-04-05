@@ -1,0 +1,45 @@
+﻿lrtree
+======
+
+.. automodule:: lrtree
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      Lrtree
+   
+   
+
+   
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      NotFittedError
+   
+   
+
+
+
+.. rubric:: Modules
+
+.. autosummary::
+   :toctree:
+   :recursive:
+
+   lrtree.fit
+   lrtree.generate_data
+   lrtree.predict
+

@@ -1,0 +1,29 @@
+lrtree.generate\_data
+=====================
+
+.. automodule:: lrtree.generate_data
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      generate_data
+   
+   
+
+   
+   
+   
+
+   
+   
+   
+
+
+

@@ -1,0 +1,6 @@
+lrtree.predict.predict
+======================
+
+.. currentmodule:: lrtree.predict
+
+.. autofunction:: predict
