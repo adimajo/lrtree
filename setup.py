@@ -26,13 +26,17 @@ setup(name='lrtree',
       description='lrtree: logistic regression trees',
       long_description=long_description,
       long_description_content_type="text/markdown",
-      url=None,
-      packages=find_packages(),
-      include_package_data=True,
+      url="https://adimajo.github.io/lrtree",
+      packages=find_packages(exclude=["contrib", "docs", "tests", "examples", "venv"]),
       author='Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar',
       author_email='Groupe-recherche-operationnelle.GRO@credit-agricole-sa.fr',
       install_requires=install_requires,
+      test_suite="pytest-runner",
       classifiers=[
           "Programming Language :: Python :: 3",
           "Operating System :: OS Independent",
-      ])
+      ],
+      scripts=["scripts/fit_data_reelles.py",
+               "scripts/traitement_data.py",
+               "scripts/validation.py"]
+      )
