@@ -1,6 +1,0 @@
-lrtree.predict.precision
-========================
-
-.. currentmodule:: lrtree.predict
-
-.. autofunction:: precision

@@ -1,6 +1,0 @@
-lrtree.predict.predict\_proba
-=============================
-
-.. currentmodule:: lrtree.predict
-
-.. autofunction:: predict_proba
