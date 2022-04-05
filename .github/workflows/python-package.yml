@@ -18,7 +18,10 @@ jobs:
         python-version: [3.7, 3.8, 3.9]
 
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+        with:
+          ref: pages
+      - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
       with:
@@ -49,6 +52,7 @@ jobs:
         PIPENV_PIPFILE=../Pipfile pipenv run make html
         cd ..
     - name: Upload documentation
+      if: ${{ matrix.python-version==3.8 }}
       run: |
         export LATEST_COMMITER_EMAIL=`git --no-pager log -1 -s --format="%ae"`
         echo $LATEST_COMMITER_EMAIL
