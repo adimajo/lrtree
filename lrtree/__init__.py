@@ -63,19 +63,17 @@ def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion
         logger.error(msg)
         raise ValueError(msg)
 
-    if validation and test:
-        if len(ratios) != 2:
-            msg = ("With validation and test, dataset split ratios should be 2 "
-                   "positive numbers with the sum less then 1")
-            logger.error(msg)
-            raise ValueError(msg)
-    elif validation or test:
-        if len(ratios) != 1:
-            msg = ("With either validation or test, dataset split ratios should contain 1 "
-                   "argument strictly between 0 and 1")
-            logger.error(msg)
-            raise ValueError(msg)
-    elif ratios != (0.7,):
+    if validation and test and len(ratios) != 2:
+        msg = ("With validation and test, dataset split ratios should be 2 "
+               "positive numbers with the sum less then 1")
+        logger.error(msg)
+        raise ValueError(msg)
+    elif (validation or test) and len(ratios) != 1:
+        msg = ("With either validation or test, dataset split ratios should contain 1 "
+               "argument strictly between 0 and 1")
+        logger.error(msg)
+        raise ValueError(msg)
+    elif ratios not in [(0.7,), None]:
         msg = ("You provided dataset split ratios, but since test "
                "and validation are False, they will not be used")
         logger.warning(msg)

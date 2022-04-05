@@ -274,7 +274,7 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
                 c_iter_to_keep = np.ones(predictions_log.shape[1], dtype=bool)
                 # Renumbering
                 dict_of_values = {v: k for k, v in enumerate(np.unique(df["c_hat"]))}
-                df["c_hat"] = df["c_hat"].apply(lambda x: dict_of_values[x])
+                df["c_hat"] = df["c_hat"].apply(lambda x, values=dict_of_values: values[x])
 
                 # Getting p(y | x, c_hat) and filling the probabilities
                 for index, c_iter in enumerate(np.unique(df["c_hat"])):
