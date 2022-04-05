@@ -1,0 +1,6 @@
+lrtree.fit.fit
+==============
+
+.. currentmodule:: lrtree.fit
+
+.. autofunction:: fit

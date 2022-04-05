@@ -1,0 +1,35 @@
+lrtree.fit
+==========
+
+.. automodule:: lrtree.fit
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      fit
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      OneClassReg
+   
+   
+
+   
+   
+   
+
+
+
