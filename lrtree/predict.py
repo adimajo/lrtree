@@ -14,15 +14,7 @@ from copy import deepcopy
 from scripts.traitement_data import bin_data_cate_test, categorie_data_bin_test
 
 
-def predict(self, X):
-    """
-    Predicts the labels for new values using previously fitted lrtree object
-
-    :param numpy.ndarray X:
-        array_like of shape (n_samples, n_features)
-        Vector to be scored, where `n_samples` is the number of samples and
-        `n_features` is the number of features
-    """
+def _predict(self, X, fun):
     self.check_is_fitted()
     # List of models for each class
     link = self.best_link
@@ -49,14 +41,32 @@ def predict(self, X):
             bloc = categorie_data_bin_test(bloc.rename(columns=self.column_names), treatment[liste_cla[i]]["enc"],
                                            treatment[liste_cla[i]]["merged_cat"],
                                            treatment[liste_cla[i]]["discret_cat"])
-        bloc_pred = logreg[i].predict(bloc)
+        if fun == "predict":
+            bloc_pred = logreg[i].predict(bloc)
+        else:
+            bloc_pred = logreg[i].predict_proba(bloc)
         k = 0
         for j in range(len(X_df)):
             if filtre[j]:
-                X_df.loc[j, "pred"] = bloc_pred[k]
+                if fun == "predict":
+                    X_df.loc[j, "pred"] = bloc_pred[k]
+                else:
+                    X_df.loc[j, "pred"] = bloc_pred[k][1]
                 k = k + 1
 
     return X_df["pred"].to_numpy()
+
+
+def predict(self, X):
+    """
+    Predicts the labels for new values using previously fitted lrtree object
+
+    :param numpy.ndarray X:
+        array_like of shape (n_samples, n_features)
+        Vector to be scored, where `n_samples` is the number of samples and
+        `n_features` is the number of features
+    """
+    return _predict(self, X, fun="predict")
 
 
 def predict_proba(self, X):
@@ -68,40 +78,7 @@ def predict_proba(self, X):
         Vector to be scored, where `n_samples` is the number of samples and
         `n_features` is the number of features
     """
-    self.check_is_fitted()
-    # List of models for each class
-    link = self.best_link
-    logreg = self.best_logreg
-    # Predicted class for each sample
-    if self.data_treatment:
-        enc_global = self.best_treatment["global"]
-        classes = link.predict(bin_data_cate_test(X, enc_global))
-    else:
-        classes = link.predict(X)
-    # Sorted list of the classes that were predicted
-    liste_cla = np.unique(classes)
-    X_df = pd.DataFrame(X)
-    X_df["class"] = classes
-    X_df["pred"] = 0
-
-    for i in range(len(liste_cla)):
-        filtre = X_df["class"] == liste_cla[i]
-        bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
-        if self.data_treatment:
-            treatment = self.best_treatment
-            bloc = categorie_data_bin_test(bloc.rename(columns=self.column_names), treatment[liste_cla[i]]["enc"],
-                                           treatment[liste_cla[i]]["merged_cat"],
-                                           treatment[liste_cla[i]]["discret_cat"])
-        else:
-            bloc = bloc.add_prefix("par_")
-        bloc_pred = logreg[i].predict_proba(bloc)
-        k = 0
-        for j in range(len(X_df)):
-            if filtre[j]:
-                X_df.loc[j, "pred"] = bloc_pred[k][1]
-                k = k + 1
-
-    return X_df["pred"].to_numpy()
+    return _predict(self, X, fun="predict_proba")
 
 
 def precision(self, X_test, y_test):
@@ -123,5 +100,4 @@ def precision(self, X_test, y_test):
 
     prediction = self.predict(X_test)
     diff = np.count_nonzero(prediction - y_test)
-    precision = 1 - diff / len(X_test)
-    return precision
+    return 1 - diff / len(X_test)

@@ -52,7 +52,7 @@ def clean_data(data):
     data["Defaut_12_Mois_contagion"] = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)])
 
     # A ne pas utiliser
-    Pas_utiles = ['ACTIVITE_ECO_ENTREP_APE', 'ACTIVITE_ECO_ETABLIST_NAF', 'CATEGORIE_JURIDIQUE', 'CLASSE_NOTA_TIERS',
+    pas_utiles = ['ACTIVITE_ECO_ENTREP_APE', 'ACTIVITE_ECO_ETABLIST_NAF', 'CATEGORIE_JURIDIQUE', 'CLASSE_NOTA_TIERS',
                   'CODE_AGENCE', 'CODE_COMMUNE_ADRESSE', 'CODE_RESIDENT_FISCALITE',
                   'CRED_Null_BIEN_FINANCE', 'CRED_Null_BIEN_FINANCE_CONSO', 'CRED_Null_BIEN_FINANCE_HAB',
                   'CRED_Null_CATEGORIE_PRET', 'CRED_Null_CATEGORIE_PRET_CONSO',
@@ -79,7 +79,7 @@ def clean_data(data):
                   'SIT_PARTICULIERE_PAR', 'SIT_PARTICULIERE_PRO', 'TIERS_CLOS_M', 'TYPE_TIERS', 'Top_Forborne_sain',
                   'Top_defaut_contagion', 'Top_defaut_no_contagion', 'Typo_DFT', 'defaut_12_mois_tiers_old_def',
                   'perimetre_modele', 'top_exclu']
-    data = data.drop(Pas_utiles, axis=1)
+    data = data.drop(pas_utiles, axis=1)
 
     rows = ['cohort_concat', 'nb_date_arrete', 'cohort_debut', 'cohort_fin', 'pct_top_defaut', 'Total',
             'AllocProportion',
@@ -120,12 +120,12 @@ def extreme_values(data, missing=False):
     for column in data.columns:
         data.loc[:, column] = data[column].fillna(value=0)
 
-    Dav_Null = ["DAV_Null_INDIC_TIERS_CONTENTIEUX", "DAV_Null_INDIC_TIERS_NEIERTZ", "DAV_Null_INDIC_PERS_FICP",
+    dav_null = ["DAV_Null_INDIC_TIERS_CONTENTIEUX", "DAV_Null_INDIC_TIERS_NEIERTZ", "DAV_Null_INDIC_PERS_FICP",
                 "DAV_Null_PERS_SAISIE_ATTRIB",
                 "DAV_Null_INDIC_PERS_TUTELLE", "DAV_Null_INDIC_PERS_CURATELLE", "DAV_Null_INDIC_PERS_NEIERTZ",
                 "DAV_Null_INDIC_PERS_REDRST_JUDIC", "DAV_Null_INDIC_PERS_CONSTIT_STE",
                 "DAV_Null_INDIC_PERS_LIQUID_JUDIC"]
-    for column in Dav_Null:
+    for column in dav_null:
         if column in data.columns:
             data[column].replace(['0', '1'], [0, 1], inplace=True)
 
@@ -232,12 +232,6 @@ def categorie_data_bin_train(data, var_cible):
             Data with some variables being categorical
     """
     X = data.copy()
-    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
-                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
     to_change = []
     merged_cat = {}
@@ -250,7 +244,7 @@ def categorie_data_bin_train(data, var_cible):
 
     discret_cat = {}
     for column in X.columns:
-        if column not in categorical and column != var_cible :
+        if column not in categorical and column != var_cible:
             to_change.append(column)
             X.loc[:, column] = X[column].astype(np.float64)
             X, binning = discretize_feature(X, column, var_cible)
@@ -295,12 +289,6 @@ def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
         OneHotEncoder fitted on the training data
     """
     X_val = data_val.copy()
-    categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-                   "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-                   "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
-                   "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-                   "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
     categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
     to_change = []
     for column in categorical:
@@ -593,7 +581,6 @@ def regroupement(X, var, var_predite, seuil=0.2):
 
     # Necessary to be able to compare (and unique) categories
     X_grouped[var] = X_grouped[var].astype(str)
-    initial_categories = np.unique(X_grouped[var])
     p_value = 1
     # We want a minimum of two categories, otherwise the variable becomes useless
     while p_value > seuil and len(np.unique(X_grouped[var])) > 2:
@@ -696,7 +683,7 @@ def cut_points(x, y):
         else:
             return None
 
-    def getIndex(low, upp, depth=depth):
+    def get_index(low, upp, depth=depth):
         x = xo[low:upp]
         y = yo[low:upp]
         # Finds the best place to split, if we had to split
@@ -718,7 +705,7 @@ def cut_points(x, y):
         x = xo[low: upp]
         if len(x) < 2:
             return cut_points
-        cc = getIndex(low, upp, depth=depth)
+        cc = get_index(low, upp, depth=depth)
         if (cc is None):
             return cut_points
         ci = int(cc[0])
@@ -752,7 +739,7 @@ def discretize_feature(X, var, var_predite):
 
     binning = cut_points(X[var].to_numpy(), X[var_predite].to_numpy())
 
-    x_discrete = [1 for i in range(len(x))]
+    x_discrete = [1 for _ in range(len(x))]
     for i in range(len(x)):
         for cut_value in binning:
             if x[i] > cut_value:
@@ -763,7 +750,7 @@ def discretize_feature(X, var, var_predite):
 
 def apply_discret(X, var, binning):
     x = X[var].to_numpy()
-    x_discrete = [1 for i in range(len(x))]
+    x_discrete = [1 for _ in range(len(x))]
     for i in range(len(x)):
         for cut_value in binning:
             if x[i] > cut_value:
