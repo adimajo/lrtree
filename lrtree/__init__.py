@@ -22,7 +22,7 @@ class NotFittedError(sk.exceptions.NotFittedError):
 
 def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion: str):
     """
-    Checks input arguments :code: algo, :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`
+    Checks input arguments :code:`algo`, :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`
     """
     # The algorithm should be one the ones in the list
     if type(algo) != str:
