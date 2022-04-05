@@ -187,6 +187,8 @@ deploy:
     - python3 setup.py sdist bdist_wheel
     - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
     - export CURL_CA_BUNDLE=""
+    - 'echo TARGET REPOSITORY : ${BOOT_ARTI_PYPI_SCRATCH_REGISTRY}'
+    - echo ${BOOT_ARTI_PYPI_SCRATCH_REGISTRY} >> .pypirc
     - pipenv run twine upload --cert cacreditagricoleserver.crt --config-file .pypirc --repository arti dist/*
   only:
    - master
