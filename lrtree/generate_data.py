@@ -1,15 +1,11 @@
 """
 generate_data module for the Lrtree class: generating some data to test the algorithm on.
-
-.. autosummary::
-    :toctree:
-
-    generate_data
 """
 import numpy as np
 
 
-def generate_data(n: int, d: int, theta: np.ndarray = None):
+@staticmethod
+def generate_data(n: int, d: int, seed=None, theta: np.ndarray = None):
     """
     Generates some toy continuous data that gets discretized, and a label
     is drawn from a logistic regression given the discretized features.
@@ -17,11 +13,15 @@ def generate_data(n: int, d: int, theta: np.ndarray = None):
     :param int n: Number of observations to draw.
     :param int d: Number of features to draw.
     :param numpy.ndarray theta: Logistic regression coefficient to use (if None, use the one provided).
+    :param int seed: numpy random seed
     :return: generated data x and y, coefficient theta and bic
     :rtype: numpy.ndarray, numpy.ndarray, numpy.ndarray, float
     """
+    np.random.seed(seed)
     if theta is not None and not isinstance(theta, np.ndarray):
         raise ValueError("theta must be an np.array (or None).")
+    elif theta is not None and seed is not None:
+        raise ValueError("theta and seed provided, aborting.")
     elif theta is None:
         theta = np.random.normal(0, 5, (4, 2))  # TODO: generalize to more dimensions and leaves
         # theta = np.array([[3, -9], [-2, 4], [6, 7], [8, -3]])
@@ -37,6 +37,6 @@ def generate_data(n: int, d: int, theta: np.ndarray = None):
     p = 1 / (1 + np.exp(- log_odd))
     y = np.random.binomial(1, p)
 
-    bic = -d * np.log(n) + 2 * np.log(y * p + (1 - y) * (1 - p)).sum()
+    bic = -d * sum([np.log((leaf == i).sum()) for i in np.unique(leaf)]) + 2 * np.log(y * p + (1 - y) * (1 - p)).sum()
 
     return x, y, theta, bic

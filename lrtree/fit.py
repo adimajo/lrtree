@@ -1,10 +1,5 @@
 """
 fit module for the Lrtree class
-
-.. autosummary::
-    :toctree:
-
-    fit
 """
 import lrtree
 import numpy as np
@@ -131,8 +126,7 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
         idx = df["c_map"] == c_iter
         if self.validation:
             y_validate = df[idx & df.index.isin(self.validate_rows)]["y"].tolist()
-            X_validate = df[idx & df.index.isin(self.validate_rows)]
-            X_validate = X_validate.drop(['y', 'c_hat', 'c_map'], axis=1)
+            X_validate = df[idx & df.index.isin(self.validate_rows)].drop(['y', 'c_hat', 'c_map'], axis=1)
             if self.data_treatment:
                 X_validate = X_validate.rename(columns=self.column_names)
                 X_validate = categorie_data_bin_test(X_validate,
@@ -141,17 +135,15 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
                                                      treatment[c_iter]["discret_cat"])
         else:
             y_validate = df[idx & df.index.isin(self.train_rows)]["y"].tolist()
-            X_validate = df[idx & df.index.isin(self.train_rows)]
-            X_validate = X_validate.drop(['y', 'c_hat', 'c_map'], axis=1)
+            X_validate = df[idx & df.index.isin(self.train_rows)].drop(['y', 'c_hat', 'c_map'], axis=1)
             if self.data_treatment:
                 X_validate = categorie_data_bin_test(X_validate.rename(columns=self.column_names),
                                                      treatment[c_iter]["enc"],
                                                      treatment[c_iter]["merged_cat"],
                                                      treatment[c_iter]["discret_cat"])
         if X_validate.shape[0] > 0:
-            pred = model.predict_proba(X_validate.to_numpy())
+            y_pred = model.predict_proba(X_validate.to_numpy())[:, 1]
             lengths_pred.append(X_validate.shape[0])
-            y_pred = [pred[i][1] for i in range(len(pred))]
             criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1])
             y_true = [*y_true, *y_validate]
             y_proba = [*y_proba, *y_pred]
@@ -162,7 +154,7 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
     elif self.criterion == "aic":
         return criterion - np.sum([model.n_features_in_ for model in model_c_map])
     elif self.criterion == "bic":
-        return criterion - np.sum([lengths_pred[index] * model.n_features_in_ for index,
+        return criterion - np.sum([np.log(lengths_pred[index]) * model.n_features_in_ for index,
                                    model in enumerate(model_c_map)])
 
 
@@ -175,7 +167,7 @@ def _vectorized_multinouilli(prob_matrix: np.array, items: list) -> np.array:
     :type prob_matrix: numpy.array
     :param list items: The factor levels to sample from.
     :returns: The drawn factor levels for each observation.
-    :rtype: numpy.array
+    :rtype: numpy.ndarray
     """
     if len(items) != prob_matrix.shape[1]:  # pragma: no cover
         msg = "The number of factors {} and the number of columns of prob_matrix {} must be of the same length".format(
@@ -546,71 +538,74 @@ def _fit_func(X, y, algo='sem', criterion="aic", max_iter=100, tree_depth=5, cla
     """
     Creates the lrtree model and fits it to the data
 
-            :param str algo: either sem or em
-            :param str criterion: either AIC (default), BIC or GINI
-            :param float min_impurity_decrease: passed to DecisionTree
-            :param bool validation: set aside a validation set?
-            :param bool optimal_size: Whether to use the tree parameters, or to take the optimal tree
-                (used only with a validation set)
-            :param numpy.ndarray X:
-                array_like of shape (n_samples, n_features)
-                Vector to be scored, where `n_samples` is the number of samples and
-                `n_features` is the number of features
-            :param numpy.ndarray y:
-                Boolean (0/1) labels of the observations. Must be of
-                the same length as X
-                (numpy "numeric" array).
-            :param int max_iter:
-                Number of MCMC steps to perform.
-            :param int tree_depth:
-                Maximum depth of the tree used
-            :param int class_num:
-                Number of initial discretization intervals for all variables.
-            :param bool data_treatment:
-                Whether to discretize / group levels inside the segments.
-            """
+    :param str algo: either sem or em
+    :param str criterion: either AIC (default), BIC or GINI
+    :param float min_impurity_decrease: passed to DecisionTree
+    :param bool validation: set aside a validation set?
+    :param bool optimal_size: Whether to use the tree parameters, or to take the optimal tree
+        (used only with a validation set)
+    :param numpy.ndarray X:
+        array_like of shape (n_samples, n_features)
+        Vector to be scored, where `n_samples` is the number of samples and
+        `n_features` is the number of features
+    :param numpy.ndarray y:
+        Boolean (0/1) labels of the observations. Must be of
+        the same length as X
+        (numpy "numeric" array).
+    :param int max_iter:
+        Number of MCMC steps to perform.
+    :param int tree_depth:
+        Maximum depth of the tree used
+    :param int class_num:
+        Number of initial discretization intervals for all variables.
+    :param bool data_treatment:
+        Whether to discretize / group levels inside the segments.
+    """
     model = lrtree.Lrtree(algo=algo, test=False, validation=validation, criterion=criterion, ratios=(0.7,),
                           class_num=class_num, max_iter=max_iter, data_treatment=data_treatment)
-    model.fit(X, y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease, optimal_size=optimal_size)
+    model.fit(X=X, y=y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease,
+              optimal_size=optimal_size)
     return model
 
 
 def _fit_parallelized(X, y, algo='sem', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5,
                       class_num=10, min_impurity_decrease=0.0, optimal_size=True, validation=False,
                       data_treatment=False):
-    """A fit function which creates tge model and fits it, where the random initializations are parallelized
-            :param str algo: either sem or em
-            :param str criterion: either AIC (default), BIC or GINI
-            :param float min_impurity_decrease: passed to DecisionTree
-            :param bool validation: set aside a validation set?
-            :param bool optimal_size: Whether to use the tree parameters, or to take the optimal tree
-                (used only with a validation set)
-            :param numpy.ndarray X:
-                array_like of shape (n_samples, n_features)
-                Vector to be scored, where `n_samples` is the number of samples and
-                `n_features` is the number of features
-            :param numpy.ndarray X:
-                array_like of shape (n_samples, n_features)
-                Vector to be scored, where `n_samples` is the number of samples and
-                `n_features` is the number of features
-            :param numpy.ndarray y:
-                Boolean (0/1) labels of the observations. Must be of
-                the same length as X
-                (numpy "numeric" array).
-            :param int nb_init:
-                Number of different random initializations
-            :param int nb_jobs:
-                Number of jobs for the Parallelization
-                Default : -1, all CPU are used
-            :param int max_iter:
-                Number of MCMC steps to perform.
-            :param int tree_depth:
-                Maximum depth of the tree used
-            :param int class_num:
-                Number of initial discretization intervals for all variables.
-            :param bool data_treatment:
-                Whether to discretize / group levels inside the segments.
-            """
+    """
+    A fit function which creates tge model and fits it, where the random initializations are parallelized
+
+    :param str algo: either sem or em
+    :param str criterion: either AIC (default), BIC or GINI
+    :param float min_impurity_decrease: passed to DecisionTree
+    :param bool validation: set aside a validation set?
+    :param bool optimal_size: Whether to use the tree parameters, or to take the optimal tree
+        (used only with a validation set)
+    :param numpy.ndarray X:
+        array_like of shape (n_samples, n_features)
+        Vector to be scored, where `n_samples` is the number of samples and
+        `n_features` is the number of features
+    :param numpy.ndarray X:
+        array_like of shape (n_samples, n_features)
+        Vector to be scored, where `n_samples` is the number of samples and
+        `n_features` is the number of features
+    :param numpy.ndarray y:
+        Boolean (0/1) labels of the observations. Must be of
+        the same length as X
+        (numpy "numeric" array).
+    :param int nb_init:
+        Number of different random initializations
+    :param int nb_jobs:
+        Number of jobs for the Parallelization
+        Default : -1, all CPU are used
+    :param int max_iter:
+        Number of MCMC steps to perform.
+    :param int tree_depth:
+        Maximum depth of the tree used
+    :param int class_num:
+        Number of initial discretization intervals for all variables.
+    :param bool data_treatment:
+        Whether to discretize / group levels inside the segments.
+    """
     models = Parallel(n_jobs=nb_jobs)(
         delayed(_fit_func)(X, y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
                            class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease,

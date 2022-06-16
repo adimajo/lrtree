@@ -33,24 +33,23 @@ conn_info = {"host": os.environ.get("IP_VERTICA"),
              "connection_timeout": 100000}
 
 
-
 if __name__ == "__main__":
     # Variables utilisées par le retail (tous segments cumulés)
-    # Used = ["DAV_Null_EHB_DAV", "DAV_Null_SLD_MOY_CREDITEUR_M", "DAV_Null_SOLDE_MOYEN_FLUX_12M",
-    #         "DAV_Null_SOLDE_MOYEN_M",
-    #         "DAV_Null_SOLDE_MINIMUM_12M", "DAV_Null_FLX_DBT_NBOPE_DEB_12", "DAV_Null_MNT_REFUS_PAIEMENT_M",
-    #         "DAV_Null_MNT_REFUS_PAIEMT_12M", "DAV_Null_NB_REFUS_PAIEMT_3M", "DAV_Null_NB_REFUS_PAIEMT_6M",
-    #         "DAV_Null_NB_REFUS_PAIEMT_M", "DAV_Null_NBPREL_ORG_FINANC_6M", "DAV_Null_NB_TOT_JOURS_DEP_3M",
-    #         "DAV_Null_NB_TOT_JOURS_DEP_M", "DAV_Null_NB_TOT_JOURS_DEP_12M", "DAV_Null_NB_TOT_JOURS_DEP_6M",
-    #         "DAV_Null_NB_TOT_PMT_CARTE_12M", "DAV_Null_NBTOT_JOURS_DEBIT_6M", "DAV_Null_NB_OPE_DEBIT_12M",
-    #         "DAV_Null_NB_CARTES_DAV", "DAV_Null_NBJOURS_DPS_DEPASS",
-    #         "DAV_Null_CPT_JOURS_CONS_DEP_M", "INTERETS_DAV_FLUX", "INTERETS_DEBIT_12M_TIERS",
-    #         "CRED_Null_MAXJOUR_CONS_RET_12M", "CRED_Null_MNT_TOT_IMPAYE_CON", "CRED_Null_NB_JOURS_MAX_RETARD",
-    #         "CRED_Null_NB_JOURS_CONS_RETARD", "ENGAGEMENTS_HORS_BILAN_GR_Calc", "EPARGNE_TOTALE", "EPARGNE_LOGEMENT_GR",
-    #         "EPARGNE_LIVRET_GR", "ENCOURS_RETARD_INF90", "ENCOURS_RETARD_SUP90", "ANCIEN_RELATION_G_RISQUE",
-    #         "INDIC_PERS_INTERDIT_BANC", "Regroup_CSP_Initiale", "CAPACITE_JURIDIQUE", "Categ_NAF_Pro_Agri",
-    #         "TOP_SEUIL_New_def", "DETTES_CT_DETTES_TOT_TIERS", "DETTES_TOT_FLUX_CRED_TIERS", "DETTES_TOT_FLUX_CRED_PRO",
-    #         "NB_MOIS_CREATION_ENTREP", "segment", "incident"]
+    Used = ["DAV_Null_EHB_DAV", "DAV_Null_SLD_MOY_CREDITEUR_M", "DAV_Null_SOLDE_MOYEN_FLUX_12M",
+            "DAV_Null_SOLDE_MOYEN_M",
+            "DAV_Null_SOLDE_MINIMUM_12M", "DAV_Null_FLX_DBT_NBOPE_DEB_12", "DAV_Null_MNT_REFUS_PAIEMENT_M",
+            "DAV_Null_MNT_REFUS_PAIEMT_12M", "DAV_Null_NB_REFUS_PAIEMT_3M", "DAV_Null_NB_REFUS_PAIEMT_6M",
+            "DAV_Null_NB_REFUS_PAIEMT_M", "DAV_Null_NBPREL_ORG_FINANC_6M", "DAV_Null_NB_TOT_JOURS_DEP_3M",
+            "DAV_Null_NB_TOT_JOURS_DEP_M", "DAV_Null_NB_TOT_JOURS_DEP_12M", "DAV_Null_NB_TOT_JOURS_DEP_6M",
+            "DAV_Null_NB_TOT_PMT_CARTE_12M", "DAV_Null_NBTOT_JOURS_DEBIT_6M", "DAV_Null_NB_OPE_DEBIT_12M",
+            "DAV_Null_NB_CARTES_DAV", "DAV_Null_NBJOURS_DPS_DEPASS",
+            "DAV_Null_CPT_JOURS_CONS_DEP_M", "INTERETS_DAV_FLUX", "INTERETS_DEBIT_12M_TIERS",
+            "CRED_Null_MAXJOUR_CONS_RET_12M", "CRED_Null_MNT_TOT_IMPAYE_CON", "CRED_Null_NB_JOURS_MAX_RETARD",
+            "CRED_Null_NB_JOURS_CONS_RETARD", "ENGAGEMENTS_HORS_BILAN_GR_Calc", "EPARGNE_TOTALE", "EPARGNE_LOGEMENT_GR",
+            "EPARGNE_LIVRET_GR", "ENCOURS_RETARD_INF90", "ENCOURS_RETARD_SUP90", "ANCIEN_RELATION_G_RISQUE",
+            "INDIC_PERS_INTERDIT_BANC", "Regroup_CSP_Initiale", "CAPACITE_JURIDIQUE", "Categ_NAF_Pro_Agri",
+            "TOP_SEUIL_New_def", "DETTES_CT_DETTES_TOT_TIERS", "DETTES_TOT_FLUX_CRED_TIERS", "DETTES_TOT_FLUX_CRED_PRO",
+            "NB_MOIS_CREATION_ENTREP", "segment", "incident"]
 
     # # Avec la colonne qui donne le segment
     # data = pd.read_pickle("dataa_app_seg_inc.pkl")
@@ -70,25 +69,29 @@ if __name__ == "__main__":
     # y_train = y.astype(np.int32)
 
     # Données crca
-    data_crca=pd.read_sas("base_crca.sas7bdat")
+    data_crca = pd.read_sas("base_crca.sas7bdat")
     # Données lcl
-    data_lcl=pd.read_sas("base_lcl.sas7bdat")
+    data_lcl = pd.read_sas("base_lcl.sas7bdat")
     # Données de sofinco
-    data_edm=pd.read_sas("base_edm.sas7bdat")
-    data_cc=pd.read_sas("base_cc.sas7bdat")
-    data_gd=pd.read_sas("base_gd_vf.sas7bdat")
-    data_auto=pd.read_sas("base_auto_vf.sas7bdat")
-    data_instist=pd.read_sas("base_inst_vf.sas7bdat")
+    data_edm = pd.read_sas("base_edm.sas7bdat")
+    data_cc = pd.read_sas("base_cc.sas7bdat")
+    data_gd = pd.read_sas("base_gd_vf.sas7bdat")
+    data_auto = pd.read_sas("base_auto_vf.sas7bdat")
+    data_instist = pd.read_sas("base_inst_vf.sas7bdat")
     # score2 entre 168 et 391 pour crca ?
     # segments = grscor2 = [b'1A', b'1C', b'1D', b'1J', b'1M', b'1P', b'1U', b'1Y', b'2U', b'2L', b'3L']
-    Common=['id', 'DOFFR', 'DNAISS', 'DNACJ', 'DEMBA', 'AMEMBC', 'DCLEM', 'HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'CPCL', 'PROD', 'SPROD', 'CPROVS', 'MREVNU', 'MREVCJ', 'MREVAU', 'MRCJAU', 'MCDE', 'CREDAC', 'APPORT', 'ENDEXT', 'NBENF', 'MLOYER', 'MT_LOYER', 'MT_CHRG', 'MT_PENS_DU', 'ECJCOE', 'RFMD', 'AMCIRC', 'NATB', 'CVFISC', 'cible', 'grscor2', 'score2']
-    Used=['DNAISS', 'DNACJ', 'DEMBA', 'AMEMBC', 'DCLEM', 'HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'CPCL', 'PROD', 'SPROD', 'CPROVS', 'MREVNU', 'MREVCJ', 'MREVAU', 'MRCJAU', 'MCDE', 'CREDAC', 'APPORT', 'ENDEXT', 'NBENF', 'MLOYER', 'MT_LOYER', 'MT_CHRG', 'MT_PENS_DU', 'ECJCOE', 'RFMD', 'AMCIRC', 'NATB', 'CVFISC', 'grscor2']
-    Cate=['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
-    data=pd.concat([data_crca[Common], data_lcl[Common], data_edm[Common], data_cc[Common], data_gd[Common], data_auto[Common], data_instist[Common]], ignore_index=True)
+    Common = ['id', 'DOFFR', 'DNAISS', 'DNACJ', 'DEMBA', 'AMEMBC', 'DCLEM', 'HABIT', 'SITFAM', 'CSP', 'CSPCJ',
+              'TOP_COEMP', 'CPCL', 'PROD', 'SPROD', 'CPROVS', 'MREVNU', 'MREVCJ', 'MREVAU', 'MRCJAU', 'MCDE', 'CREDAC', 'APPORT', 'ENDEXT', 'NBENF', 'MLOYER', 'MT_LOYER', 'MT_CHRG', 'MT_PENS_DU', 'ECJCOE', 'RFMD', 'AMCIRC', 'NATB', 'CVFISC', 'cible', 'grscor2', 'score2']
+    Used = ['DNAISS', 'DNACJ', 'DEMBA', 'AMEMBC', 'DCLEM', 'HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'CPCL',
+            'PROD', 'SPROD', 'CPROVS', 'MREVNU', 'MREVCJ', 'MREVAU', 'MRCJAU', 'MCDE', 'CREDAC', 'APPORT', 'ENDEXT',
+            'NBENF', 'MLOYER', 'MT_LOYER', 'MT_CHRG', 'MT_PENS_DU', 'ECJCOE', 'RFMD', 'AMCIRC', 'NATB', 'CVFISC',
+            'grscor2']
+    Cate = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB',
+            'CVFISC', 'grscor2']
+    data = pd.concat([data_crca[Common], data_lcl[Common], data_edm[Common], data_cc[Common], data_gd[Common],
+                      data_auto[Common], data_instist[Common]], ignore_index=True)
 
-
-
-    data=donnes_cacf(data)
+    data = donnes_cacf(data)
     train_rows = np.random.choice(2372086, 100000, replace=False)
     data_train=data[data.index.isin(train_rows)]
     data_val=data.drop(train_rows)
@@ -112,7 +115,6 @@ if __name__ == "__main__":
     # print([model.best_logreg[i].coef_ for i in range(len(model.best_logreg))])
     print("Nb segments :", len(model.best_logreg))
 
-
     # print("Régression logistique :")
     # modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
     #                                                 max_iter=100)
@@ -133,7 +135,6 @@ if __name__ == "__main__":
     # model_forest = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
     # model_forest.fit(X_train, y_train)
 
-
     y_total_train = []
     y_total_proba = []
     for seg in np.unique(data["grscor2"]) :
@@ -147,10 +148,8 @@ if __name__ == "__main__":
         y_total_proba = [*y_total_proba, *y_proba]
     print("SEM total : ", roc_auc_score(y_total_train, y_total_proba))
 
-
     y_total_train = []
     y_total_proba = []
-
 
     for base in [data_gd, data_cc, data_edm, data_instist, data_auto, data_crca, data_lcl]:
         sub_base=donnes_cacf(base[Common])
@@ -163,9 +162,6 @@ if __name__ == "__main__":
         y_total_proba = [*y_total_proba, *y_proba]
 
         print("SEM total : ", roc_auc_score(y_total_train, y_total_proba))
-
-
-
 
     # print("Totalité des données de validation")
     # table_val = ["LK1ASASVIEW.agri_no_inc_val", "LK1ASASVIEW.agri_inc_val", "LK1ASASVIEW.asso_val",

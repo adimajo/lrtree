@@ -1,12 +1,5 @@
 """
 Predict, predict_proba and precision methods for the Lrtree class
-
-.. autosummary::
-    :toctree:
-
-    predict
-    predict_proba
-    precision
 """
 import pandas as pd
 import numpy as np
@@ -14,8 +7,8 @@ from copy import deepcopy
 from scripts.traitement_data import bin_data_cate_test, categorie_data_bin_test
 
 
-def _predict(self, X, fun):
-    self.check_is_fitted()
+def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
+    self._check_is_fitted()
     # List of models for each class
     link = self.best_link
     logreg = self.best_logreg
@@ -57,7 +50,7 @@ def _predict(self, X, fun):
     return X_df["pred"].to_numpy()
 
 
-def predict(self, X):
+def predict(self, X: np.ndarray) -> np.ndarray:
     """
     Predicts the labels for new values using previously fitted lrtree object
 
@@ -69,7 +62,7 @@ def predict(self, X):
     return _predict(self, X, fun="predict")
 
 
-def predict_proba(self, X):
+def predict_proba(self, X: np.ndarray) -> np.ndarray:
     """
     Predicts the probability of the labels for new values using previously fitted lrtree object
 
@@ -81,7 +74,7 @@ def predict_proba(self, X):
     return _predict(self, X, fun="predict_proba")
 
 
-def precision(self, X_test, y_test):
+def precision(self, X_test: np.ndarray, y_test: np.ndarray) -> float:
     """
     Scores the precision of the prediction on the test set
 
@@ -91,6 +84,8 @@ def precision(self, X_test, y_test):
     :param numpy.ndarray y_test:
         array_like of shape (n_samples, 1)
         Vector of the value, aimed to be predicted, in the data
+    :return: precision
+    :rtype: float
     """
 
     # X_train and y_train same size

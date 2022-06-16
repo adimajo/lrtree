@@ -1,9 +1,10 @@
 """This module is dedicated to logistic regression trees
 
-.. autosummary::
-    :toctree:
+.. autoclass:: Lrtree
+   :members:
 
-    Lrtree
+    NotFittedError
+    _check_input_args
 """
 __version__ = "1.0.0"
 
@@ -14,7 +15,7 @@ import sklearn as sk
 
 class NotFittedError(sk.exceptions.NotFittedError):
     """Exception class to raise if estimator is used before fitting.
-    This class inherits from both NotFittedError from sklearn which
+    This class inherits from NotFittedError from sklearn which
     itself inherits from ValueError and AttributeError to help with
     exception handling and backward compatibility.
     """
@@ -23,6 +24,12 @@ class NotFittedError(sk.exceptions.NotFittedError):
 def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion: str):
     """
     Checks input arguments :code:`algo`, :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`
+
+    :param str algo: either "sem" or "em"
+    :param bool validation: whether to use validation set
+    :param bool test: whether to use test set
+    :param tuple ratios: proportion of validation / test samples
+    :param str criterion: one of "gini", "bic", "aic"
     """
     # The algorithm should be one the ones in the list
     if type(algo) != str:
@@ -88,45 +95,70 @@ def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion
 
 class Lrtree:
     """
-    The class implements a supervised method based in logistic trees
+    The class implements a supervised method based in logistic trees. Its attributes:
 
     .. attribute:: test
-        Boolean (T/F) specifying if a test set is required.
-        If True, the provided data is split to provide 20% of observations in a test set
-        and the reported performance is the Gini index on test set.
-        :type: bool
-    .. attribute:: validation
-        Boolean (T/F) specifying if a validation set is required.
-        If True, the provided data is split to provide 20% of observations in a validation set
-        and the reported performance is the Gini index on the validation set (if no test=False).
-        The quality of the model at each step is evaluated using the Gini index on the
-        validation set, so criterion must be set to "gini".
-        :type: bool
-    .. attribute:: criterion
-        The criterion to be used to assess the goodness-of-fit of the model: \
-        "bic" or "aic" if no validation set, else "gini".
-        :type: str
-    .. attribute:: max_iter
-        Number of MCMC steps to perform. The more the better, but it may be more intelligent to use
-        several MCMCs. Computation time can increase dramatically.
-        :type: int
-    .. attribute:: num_class
-        Number of initial segments.
-        :type: int
-    .. attribute:: criterion_iter
-        The value of the criterion wished to be optimized over the iterations.
-        :type: list
-    .. attribute:: best_link
-        The best decision tree.
-        :type: sklearn.tree.DecisionTreeClassifier
-    .. attribute:: best_reglog:
-        The list of the best logistic regression on each segment (found with best_link).
-        :type: list
-    .. attribute:: ratios
-        The float ratio values for splitting of a dataset in test, validation.
-        :type: tuple
-    """
 
+    :type: bool
+
+    Boolean (T/F) specifying if a test set is required.
+    If True, the provided data is split to provide 20% of observations in a test set
+    and the reported performance is the Gini index on test set.
+
+    .. attribute:: validation
+
+    :type: bool
+
+    Boolean (T/F) specifying if a validation set is required.
+    If True, the provided data is split to provide 20% of observations in a validation set
+    and the reported performance is the Gini index on the validation set (if no test=False).
+    The quality of the model at each step is evaluated using the Gini index on the
+    validation set, so criterion must be set to "gini".
+
+    .. attribute:: criterion
+
+    :type: str
+
+    The criterion to be used to assess the goodness-of-fit of the model:
+    "bic" or "aic" if no validation set, else "gini".
+
+    .. attribute:: max_iter
+
+    :type: int
+
+    Number of MCMC steps to perform. The more the better, but it may be more intelligent to use
+    several MCMCs. Computation time can increase dramatically.
+
+    .. attribute:: num_clas
+
+    :type: int
+
+    Number of initial segments.
+
+    .. attribute:: criterion_iter
+
+    :type: list
+
+    The value of the criterion wished to be optimized over the iterations.
+
+    .. attribute:: best_link
+
+    :type: sklearn.tree.DecisionTreeClassifier
+
+    The best decision tree.
+
+    .. attribute:: best_reglog:
+
+    :type: list
+
+    The list of the best logistic regression on each segment (found with best_link).
+
+    .. attribute:: ratios
+
+    :type: tuple
+
+    The float ratio values for splitting of a dataset in test, validation.
+    """
     def __init__(self,
                  algo: str = 'SEM',
                  test: bool = False,
@@ -139,32 +171,32 @@ class Lrtree:
         """
         Initializes self by checking if its arguments are appropriately specified.
 
-            :param str algo:        The algorithm to be used to fit the Lrtree: "SEM" for a stochastic approach or
-                                    "EM" for a non stochastic expectation/maximization algorithm.
-            :param bool test:       Boolean specifying if a test set is required.
-                                    If True, the provided data is split to provide 20%
-                                    of observations in a test set and the reported
-                                    performance is the Gini index on test set.
-            :param bool validation: Boolean (T/F) specifying if a validation set is
-                                    required. If True, the provided data is split to
-                                    provide 20% of observations in a validation set
-                                    and the reported performance is the Gini index on
-                                    the validation set (if no test=False). The quality
-                                    of the model at each step is evaluated
-                                    using the Gini index on the validation set, so
-                                    criterion must be set to "gini".
-            :param str criterion:   The criterion to be used to assess the
-                                    goodness-of-fit of the model: "bic" or
-                                    "aic" if no validation set, else "gini".
-            :param int max_iter:    Number of MCMC steps to perform. The more the
-                                    better, but it may be more intelligent to use
-                                    several MCMCs. Computation time can increase
-                                    dramatically. Defaults to 100.
-            :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
-                                    Sum of values should be less than 1. Defaults to (0.7, 0.3)
-            :param int class_num:   Number of initial segments. Defaults to 10.
-            :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each
-                                        leaf.
+        :param str algo:        The algorithm to be used to fit the Lrtree: "SEM" for a stochastic approach or
+                                "EM" for a non stochastic expectation/maximization algorithm.
+        :param bool test:       Boolean specifying if a test set is required.
+                                If True, the provided data is split to provide 20%
+                                of observations in a test set and the reported
+                                performance is the Gini index on test set.
+        :param bool validation: Boolean (T/F) specifying if a validation set is
+                                required. If True, the provided data is split to
+                                provide 20% of observations in a validation set
+                                and the reported performance is the Gini index on
+                                the validation set (if no test=False). The quality
+                                of the model at each step is evaluated
+                                using the Gini index on the validation set, so
+                                criterion must be set to "gini".
+        :param str criterion:   The criterion to be used to assess the
+                                goodness-of-fit of the model: "bic" or
+                                "aic" if no validation set, else "gini".
+        :param int max_iter:    Number of MCMC steps to perform. The more the
+                                better, but it may be more intelligent to use
+                                several MCMCs. Computation time can increase
+                                dramatically. Defaults to 100.
+        :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
+                                Sum of values should be less than 1. Defaults to (0.7, 0.3)
+        :param int class_num:   Number of initial segments. Defaults to 10.
+        :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each
+                                    leaf.
         """
         _check_input_args(algo, validation, test, ratios, criterion)
         self.criterion = criterion.lower()
@@ -198,8 +230,10 @@ class Lrtree:
         self.criterion_iter = []
         self.best_treatment = None
 
-    def check_is_fitted(self):
-        """Perform is_fitted validation for estimator.
+    def _check_is_fitted(self):
+        """
+        Perform is_fitted validation for estimator.
+
         Checks if the estimator is fitted by verifying the presence of
         fitted attributes (ending with a trailing underscore) and otherwise
         raises a NotFittedError with the given message.
@@ -213,8 +247,8 @@ class Lrtree:
             if isinstance(self.best_link, sk.tree.DecisionTreeClassifier):  # pragma: no cover
                 sk.utils.validation.check_is_fitted(self.best_link)
         except (sk.exceptions.NotFittedError, TypeError) as e:
-            raise NotFittedError(str(e) + " If you did call fit, try increasing iter: "
-                                          "it means it did not find a better solution than the random initialization.")
+            raise NotFittedError(f"{str(e)}. If you did call fit, try increasing `iter`: it means it did not find a "
+                                 f"better solution than the random initialization.")
 
     # Imported methods
     from .fit import fit

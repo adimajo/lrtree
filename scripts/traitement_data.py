@@ -1,15 +1,17 @@
+import itertools
+from bisect import bisect_right
+from copy import deepcopy
+from math import log
+
 import numpy as np
 import pandas as pd
-from math import log
-from copy import deepcopy
-from bisect import bisect_right
-from scipy.stats import chi2_contingency
 from pandas.core.common import flatten
+from scipy.stats import chi2_contingency
 from sklearn import metrics
-from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
-import itertools
-pd.options.mode.chained_assignment = None  # default='warn'
+from sklearn.preprocessing import StandardScaler
+
+pd.options.mode.chained_assignment = None
 
 
 def donnes_cacf(data):
@@ -43,11 +45,14 @@ def donnes_cacf(data):
     return data
 
 
-def clean_data(data):
-    """Removes the columns that are not useful for the prediction, pr which were already predictions
+def clean_data(data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Removes the columns that are not useful for the prediction, pr which were already predictions
 
     :param pandas.Dataframe data:
         Data to clean
+    :return: clean data
+    :rtype: pandas.DataFrame
     """
     data["Defaut_12_Mois_contagion"] = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)])
 
@@ -89,14 +94,15 @@ def clean_data(data):
     return data
 
 
-def extreme_values(data, missing=False):
-    """Deals with extreme values (ex : NaN, or not filled)
+def extreme_values(data: pd.DataFrame, missing: bool = False) -> pd.DataFrame:
+    """
+    Deals with extreme values (ex : NaN, or not filled)
     Creates (or not) a column signaling which values were missing
 
-        :param pandas.Dataframe data:
-            Data to clean
-        :param Bool missing:
-            Whether or not to create a column signaling missing values
+    :param pandas.Dataframe data:
+        Data to clean
+    :param bool missing:
+        Whether or not to create a column signaling missing values
     """
     # Valeurs extremes quand valeurs manquantes
     extremes = [99999, 99999.99, 999999.0, 9.999999999999E10, 99999999999.99, 999, 'NR']
@@ -132,7 +138,7 @@ def extreme_values(data, missing=False):
     return data
 
 
-def categorie_data_labels(data, data_val):
+def categorie_data_labels(data: pd.DataFrame, data_val: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     X = data.copy()
     X_val = data_val.copy()
     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
@@ -140,7 +146,8 @@ def categorie_data_labels(data, data_val):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
+                   "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     X_cat = []
     X_val_cat = []
@@ -172,7 +179,7 @@ def categorie_data_labels(data, data_val):
     return pd.concat([X_num, X_cat], axis=1), pd.concat([X_val_num, X_val_cat], axis=1)
 
 
-def categorie_data_bin_train_test(data, data_val):
+def categorie_data_bin_train_test(data: pd.DataFrame, data_val: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame, list):
     X = data.copy()
     X_val = data_val.copy()
     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
@@ -180,7 +187,8 @@ def categorie_data_bin_train_test(data, data_val):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
+                   "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     for column in categorical:
         if column in X.columns:
@@ -224,15 +232,18 @@ def categorie_data_bin_train_test(data, data_val):
     return X_train, X_test, labels
 
 
-def categorie_data_bin_train(data, var_cible):
-    """Binarise the categorical variables (after merging categories)
+def categorie_data_bin_train(data: pd.DataFrame, var_cible):
+    """
+    Binarise the categorical variables (after merging categories)
     Returns the data, the encoder and the column labels
 
-        :param pandas.Dataframe data:
-            Data with some variables being categorical
+    :param pandas.Dataframe data:
+        Data with some variables being categorical
+    :param str var_cible: name of target
     """
     X = data.copy()
-    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
+    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE',
+                   'NATB', 'CVFISC', 'grscor2']
     to_change = []
     merged_cat = {}
     for column in categorical:
@@ -279,17 +290,24 @@ def categorie_data_bin_train(data, var_cible):
     return X_train, labels, enc, merged_cat, discret_cat
 
 
-def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
+def categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, merged_cat: dict,
+                            discret_cat: dict) -> pd.DataFrame:
     """
-    Data treatment of the test data, using the method (merged categories, discretisation, OneHotEncoder) learned on the train data
-    Returns the treated data
+    Data treatment of the test data, using the method (merged categories, discretisation, OneHotEncoder) learned on
+    the train data
+
     :param pandas.Dataframe data_val:
         Data with some variables being categorical
     :param sklearn.preprocessing.OneHotEncoder enc:
         OneHotEncoder fitted on the training data
+    :param dict merged_cat: merged categories
+    :param dict discret_cat: discretized categories
+    :return: treated data
+    :rtype:pandas.DataFrame
     """
     X_val = data_val.copy()
-    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS', 'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
+    categorical = ['HABIT', 'SITFAM', 'CSP', 'CSPCJ', 'TOP_COEMP', 'PROD', 'SPROD', 'CPROVS',
+                   'NBENF', 'ECJCOE', 'NATB', 'CVFISC', 'grscor2']
     to_change = []
     for column in categorical:
         if column in X_val.columns:
@@ -320,21 +338,22 @@ def categorie_data_bin_test(data_val, enc, merged_cat, discret_cat):
     return X_test
 
 
-def bin_data_cate_train(data, var_cible):
+def bin_data_cate_train(data: pd.DataFrame, var_cible: str):
     X = data.copy()
     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
+                   "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     for column in categorical:
         if column in X.columns:
             to_change.append(column)
             X.loc[:, column] = X[column].astype(str)
     for column in X.columns:
-        if column not in categorical and column != var_cible :
+        if column not in categorical and column != var_cible:
             X.loc[:, column] = X[column].astype(np.float64)
     if var_cible in X.columns:
         X.drop([var_cible], axis=1, inplace=True)
@@ -362,7 +381,8 @@ def bin_data_cate_test(data_val, enc):
                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option", "TOP_SEUIL_New_def", "segment", "incident"]
+                   "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
+                   "TOP_SEUIL_New_def", "segment", "incident"]
     to_change = []
     for column in categorical:
         if column in X_val.columns:
@@ -389,7 +409,7 @@ def bin_data_cate_test(data_val, enc):
     return X_test
 
 
-def traitement_train_val(X, X_val):
+def traitement_train_val(X: pd.DataFrame, X_val: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame, list):
     """
     Traite les données et les données de test en gérant les valeurs extremes, les variables catégoriques et en
     normalisant
@@ -399,6 +419,8 @@ def traitement_train_val(X, X_val):
         Data with some variables being categorical
     :param pandas.Dataframe X_val:
         Validation data with some variables being categorical
+    :return: les données traitées et les labels des colonnes
+    :rtype: tuple
     """
     X = extreme_values(X, missing=False)
     X_val = extreme_values(X_val, missing=False)
@@ -420,19 +442,24 @@ def traitement_train_val(X, X_val):
     return X_train, X_test, labels
 
 
-def traitement_val(data, enc, scaler, merged_cat, discret_cat):
-    """Traite les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant
+def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScaler, merged_cat: dict,
+                   discret_cat: dict) -> pd.DataFrame:
+    """
+    Traite les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant
     Retourne les données traitées
-        :param pandas.Dataframe data:
-            Data with some variables being categorical
-        :param sklearn.preprocessing.OneHotEncoder enc:
-            OneHotEncoder fitted on the training data
-        :param sklearn.preprocessing.StandardScaler scaler:
-            StandardScaler fitted on the training data
-        :param dict merged_cat:
-            Merged categories for each column
-        :param dict discret_cat:
-            Binning for the discretisation for each column
+
+    :param pandas.Dataframe data:
+        Data with some variables being categorical
+    :param sklearn.preprocessing.OneHotEncoder enc:
+        OneHotEncoder fitted on the training data
+    :param sklearn.preprocessing.StandardScaler scaler:
+        StandardScaler fitted on the training data
+    :param dict merged_cat:
+        Merged categories for each column
+    :param dict discret_cat:
+        Binning for the discretisation for each column
+    :return: les données traitées
+    :rtype: pandas.DataFrame
     """
     X_val = data.copy()
     if "Defaut_12_Mois_contagion" in X_val.columns:
@@ -443,37 +470,38 @@ def traitement_val(data, enc, scaler, merged_cat, discret_cat):
     return X_val
 
 
-def traitement_train(data):
-    """Traite les données en gérant les valeurs extremes, les variables catégoriques et en normalisant
-    Retourne les données traitées, les labels des colonnes, l'encodeur pour les données catégoriques et le scaler
-
-        :param pandas.Dataframe data:
-            Data with some variables being categorical
+def traitement_train(data: pd.DataFrame) -> tuple:
     """
+    Traite les données en gérant les valeurs extremes, les variables catégoriques et en normalisant
 
+    :param pandas.Dataframe data:
+        Data with some variables being categorical
+    :return: les données traitées, les labels des colonnes, l'encodeur pour les données catégoriques et le scaler
+    :rtype: tuple
+    """
     X = data.copy()
     if "Defaut_12_Mois_contagion" in X.columns:
         X["Defaut_12_Mois_contagion"].replace(["N", "O"], [int(0), int(1)], inplace=True)
     X = extreme_values(X, missing=False)
-    # X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X, var_cible="Defaut_12_Mois_contagion")
     X, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(X, var_cible="cible")
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
     return X, labels, enc, scaler, merged_cat, discret_cat
 
 
-def green_clust(X, var, var_predite, num_clusters):
-    """ GreenClust algorithm to group modalities
-        :param pandas.Dataframe X:
-            Data with some variables being categorical
-        :param str var:
-            Column for which we apply the algorithm
-        :param str var:
-            Column we aim to predict
-        :param int num_clusters:
-            Number of modalities we want
-     """
+def green_clust(X: pd.DataFrame, var: str, var_predite: str, num_clusters: int) -> (pd.DataFrame, dict):
+    """
+    GreenClust algorithm to group modalities
 
+    :param pandas.Dataframe X:
+        Data with some variables being categorical
+    :param str var:
+        Column for which we apply the algorithm
+    :param str var:
+        Column we aim to predict
+    :param int num_clusters:
+        Number of modalities we want
+     """
     def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
         # Matrix of the changes of chi2 for every pair grouped
         for count1, value1 in enumerate(labels):
@@ -557,7 +585,7 @@ def green_clust(X, var, var_predite, num_clusters):
     return df, dico_regroupement
 
 
-def regroupement(X, var, var_predite, seuil=0.2):
+def regroupement(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2) -> (pd.DataFrame, dict):
     """
     Chi2 independence algorithm to group modalities
 
@@ -567,15 +595,17 @@ def regroupement(X, var, var_predite, seuil=0.2):
         Column for which we apply the algorithm
     :param str var:
         Column we aim to predict
+    :param str var_predite:
+        Column we aim to predict
     :param float seuil:
         Value for the p-value over which we merge modalities
-     """
+    """
     X_grouped = X.copy()
 
     def chi2_test(liste):
         try:
             return chi2_contingency(liste)[1]
-        except Exception:
+        except ValueError:
             # Happens when one modality of the variable has only 0 or only 1
             return 1
 
@@ -617,8 +647,9 @@ def regroupement(X, var, var_predite, seuil=0.2):
 
 
 def entropy(variable):
-    """Computes the entropy of the variable"""
-
+    """
+    Computes the entropy of the variable
+    """
     def stable_log(input):
         copy = input.copy()
         copy[copy <= 1e-10] = 1
@@ -631,7 +662,9 @@ def entropy(variable):
 
 
 def stopping_criterion(cut_idx, target, ent, depth):
-    """Decided whether we should cut target at cut_idx, knowing we imagine the new entropy to be"""
+    """
+    Decided whether we should cut target at cut_idx, knowing we imagine the new entropy to be
+    """
     n = len(target)
     target_entropy = entropy(target)
     gain = target_entropy - ent
@@ -652,13 +685,17 @@ def stopping_criterion(cut_idx, target, ent, depth):
 
 
 def cut_points(x, y):
-    """Computes the cut values on x to minimize the entropy (on y)"""
+    """
+    Computes the cut values on x to minimize the entropy (on y)
+    """
     xo = x
     yo = y
     depth = 1
 
     def find_cut_index(x, y):
-        """Finds the best place to split x"""
+        """
+        Finds the best place to split x
+        """
         n = len(y)
         init_entropy = 999999
         current_entropy = init_entropy
@@ -701,7 +738,9 @@ def cut_points(x, y):
             return None
 
     def part(low=0, upp=len(xo) - 1, cut_points=np.array([]), depth=depth):
-        """Recursive function with returns the cuts_points"""
+        """
+        Recursive function with returns the cuts_points
+        """
         x = xo[low: upp]
         if len(x) < 2:
             return cut_points
@@ -730,9 +769,11 @@ def cut_points(x, y):
     return result
 
 
-def discretize_feature(X, var, var_predite):
-    """Discretizes the continuous variable X[var], using the target value var_predite
-    MDPL (Minimum Description Length Principle)"""
+def discretize_feature(X: pd.DataFrame, var: str, var_predite: str):
+    """
+    Discretizes the continuous variable X[var], using the target value var_predite
+    MDPL (Minimum Description Length Principle)
+    """
     # Values at which to cut x
     x = X[var].to_numpy()
     x = x.copy()
