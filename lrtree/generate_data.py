@@ -37,6 +37,6 @@ def generate_data(n: int, d: int, seed=None, theta: np.ndarray = None):
     p = 1 / (1 + np.exp(- log_odd))
     y = np.random.binomial(1, p)
 
-    bic = -d * sum([np.log((leaf == i).sum()) for i in np.unique(leaf)]) + 2 * np.log(y * p + (1 - y) * (1 - p)).sum()
+    bic = d * sum([np.log((leaf == i).sum()) for i in np.unique(leaf)]) - 2 * np.log(y * p + (1 - y) * (1 - p)).sum()
 
     return x, y, theta, bic

@@ -27,6 +27,7 @@ class OneClassReg:
         self._single_class_label = None
         self.n_features_in_ = None
         self.coef_ = None
+        self.intercept_ = None
 
     def fit(self, X, y):
         """
