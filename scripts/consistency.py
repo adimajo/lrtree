@@ -1,30 +1,31 @@
 import os
-import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import tikzplotlib
+from tqdm import tqdm
 from loguru import logger
 from sklearn import tree
 
 from lrtree import Lrtree
 from lrtree.fit import _fit_parallelized
 
-warnings.filterwarnings("ignore", category=UserWarning)
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+logger.remove()
+logger.add(tqdm.write)
 os.environ['LOGURU_LEVEL'] = 'ERROR'
-
 
 # Affichage de l'arbre obtenu, None, texte ou image
 affichage = None
-n_experiments = 5
-
+n_experiments = 100
 hyperparameters_to_test = {
-    "#samples": [100, 300, 500, 700, 1000, 2000, 3000, 5000, 8000, 10000],
-    "#iterations": [40, 60, 80, 100, 120, 140, 160, 200],
+    "#samples": [30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 200, 230, 260, 290, 320, 350, 400, 450, 500, 550,
+                 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2300, 2600, 2900, 3200, 3500, 4000, 4500, 5000,
+                 5500, 6000],
+    "#iterations": [10, 30, 50, 75, 100],
     "#chains": range(1, 10)
 }
-
 results = {k: pd.DataFrame(
     data=np.array([[np.nan] * len(v)] * 7).T,
     columns=["BIC oracle"] + [critere + " moyen" for critere in ["BIC", "Arbre", "Forme"]] + [
@@ -73,16 +74,16 @@ if __name__ == "__main__":
     for hyperparameter_to_test in hyperparameters_to_test.keys():
         logger.info(f'Sensitivity w.r.t. {hyperparameter_to_test}')
 
-        for hyperparameter in hyperparameters_to_test[hyperparameter_to_test]:
-            logger.info(f'{hyperparameter_to_test} {hyperparameter}')
-            n_samples = hyperparameter if hyperparameter_to_test == "#samples" else 1000
-            n_iter = hyperparameter if hyperparameter_to_test == "#iterations" else 100
+        for hyperparameter in tqdm(hyperparameters_to_test[hyperparameter_to_test]):
+            logger.info(f'{hyperparameter_to_test} = {hyperparameter}')
+            n_samples = hyperparameter if hyperparameter_to_test == "#samples" else 2000
+            n_iter = hyperparameter if hyperparameter_to_test == "#iterations" else 80
             n_init = hyperparameter if hyperparameter_to_test == "#chains" else 5
             X, y, theta, BIC_oracle = Lrtree.generate_data(n_samples, 3, seed=1)
 
             criteria, formes, arbres, splits1, splits2, thetas = [], [], [], [], [], []
 
-            for k in range(n_experiments):
+            for k in tqdm(range(n_experiments), leave=False):
                 criterion, forme, arbre, split1, split2, theta_model = one_experiment(X, y, n_init, n_iter)
                 criteria.append(criterion)
                 formes.append(forme)
@@ -103,14 +104,15 @@ if __name__ == "__main__":
         for label, result_df in results.items():
             plt.figure()
             plt.plot(result_df.index, result_df[var + " moyen"])
-            plt.fill_between(result_df.index, result_df[var + " moyen"] - result_df[var + " standard"],
-                             result_df[var + " moyen"] + result_df[var + " standard"], alpha=0.5)
+            low = result_df[var + " moyen"] - result_df[var + " standard"]
+            high = result_df[var + " moyen"] + result_df[var + " standard"]
+            if var != "BIC":
+                low = np.maximum(np.array([0] * len(low)), low)
+                high = np.minimum(np.array([1] * len(high)), high)
+            plt.fill_between(result_df.index, low, high, alpha=0.5)
             if var == "BIC":
                 plt.plot(result_df.index, result_df["BIC oracle"])
             plt.xlabel(label)
             plt.ylabel(var)
-            plt.show()
-
-    # TODO: clipping
-    # np.maximum(np.array([0] * len(bonne_forme)), bonne_forme - std_forme),
-    # np.minimum(np.array([1] * len(bonne_forme)), bonne_forme + std_forme), alpha=0.5)
+            plt.savefig(os.path.join(BASE_DIR, f"pictures/{var}_{label}.png"))
+            tikzplotlib.save(os.path.join(BASE_DIR, f"tikz/{var}_{label}.tex"))

@@ -1,18 +1,24 @@
 """
 fit module for the Lrtree class
 """
-import lrtree
+import warnings
+from copy import deepcopy
+
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from loguru import logger
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import log_loss
 from sklearn.linear_model import LogisticRegression
-from scripts.traitement_data import categorie_data_bin_train, categorie_data_bin_test, bin_data_cate_train
+from sklearn.metrics import log_loss
+from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import OneHotEncoder
-from copy import deepcopy
+from sklearn.tree import DecisionTreeClassifier
+
+import lrtree
+from scripts.traitement_data import categorie_data_bin_train, categorie_data_bin_test, bin_data_cate_train
+
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 STOPPED_AT_ITERATION = "Stopped at iteration"
 
