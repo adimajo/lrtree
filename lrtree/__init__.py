@@ -167,7 +167,8 @@ class Lrtree:
                  ratios: tuple = (0.7,),
                  class_num: int = 10,
                  max_iter: int = 100,
-                 data_treatment: bool = False):
+                 data_treatment: bool = False,
+                 leaves_as_segment = False):
         """
         Initializes self by checking if its arguments are appropriately specified.
 
@@ -218,6 +219,7 @@ class Lrtree:
         self.ratios = ratios
         self.data_treatment = data_treatment
         self.column_names = None
+        self.leaves_as_segment = leaves_as_segment
 
         # Init data
         self.train_rows, self.validate_rows, self.test_rows = None, None, None
