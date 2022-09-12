@@ -87,7 +87,6 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
     :returns: The criteria.
     :rtype: float
     """
-    criterion = 0
     lengths_pred = []
     # Computing the Area Under Curve of the ROC curve, which we maximise
     y_true = []
@@ -116,18 +115,17 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
         if X_validate.shape[0] > 0:
             y_pred = model.predict_proba(X_validate)[:, 1]
             lengths_pred.append(X_validate.shape[0])
-            criterion = criterion - 2 * log_loss(y_validate, y_pred, normalize=False, labels=[0, 1])
             y_true = [*y_true, *y_validate]
             y_proba = [*y_proba, *y_pred]
         k = k + 1
-
     if self.criterion == "gini":
         return roc_auc_score(y_true, y_proba)
     elif self.criterion == "aic":
-        return criterion - np.sum([model.n_features_in_ for model in model_c_map])
+        return - 2 * log_loss(y_true, y_proba, normalize=False, labels=[0, 1]) - np.sum(
+            [model.n_features_in_ for model in model_c_map])
     elif self.criterion == "bic":
-        return criterion - np.sum([np.log(lengths_pred[index]) * model.n_features_in_ for index,
-                                   model in enumerate(model_c_map)])
+        return - 2 * log_loss(y_true, y_proba, normalize=False, labels=[0, 1]) - np.sum(
+            [np.log(lengths_pred[index]) * model.n_features_in_ for index, model in enumerate(model_c_map)])
 
 
 def _vectorized_multinouilli(prob_matrix: np.array, items: list) -> np.array:
@@ -151,6 +149,27 @@ def _vectorized_multinouilli(prob_matrix: np.array, items: list) -> np.array:
     r = np.random.rand(prob_matrix.shape[0]).reshape((-1, 1))
     k = np.sum((s < r), axis=1)
     return items[k]
+
+
+def find_leaves(link, X):
+    the_tree = link.tree_
+    n_nodes = the_tree.node_count
+    children_left = the_tree.children_left
+    children_right = the_tree.children_right
+    node_depth = np.zeros(shape=n_nodes, dtype=np.int64)
+    is_leaves = np.zeros(shape=n_nodes, dtype=bool)
+    stack = [(0, 0)]  # start with the root node id (0) and its depth (0)
+    while len(stack) > 0:
+        node_id, depth = stack.pop()
+        node_depth[node_id] = depth
+        is_split_node = children_left[node_id] != children_right[node_id]
+        if is_split_node:
+            stack.append((children_left[node_id], depth + 1))
+            stack.append((children_right[node_id], depth + 1))
+        else:
+            is_leaves[node_id] = True
+    path = link.decision_path(X)
+    return np.argmax(path[:, is_leaves], axis=1)
 
 
 def _fit_sem(self, df, X_tree, models, treatment, optimal_size, tol, tree_depth, min_impurity_decrease):
@@ -284,7 +303,10 @@ def _fit_sem(self, df, X_tree, models, treatment, optimal_size, tol, tree_depth,
         df["c_hat"] = _vectorized_multinouilli(p, df["c_hat"].unique()[c_iter_to_keep])
 
         # c_map calculation
-        df["c_map"] = np.argmax(tree_pred, axis=1)
+        if self.leaves_as_segment:
+            df["c_map"] = find_leaves(link, X)
+        else:
+            df["c_map"] = np.argmax(tree_pred, axis=1)
 
         i = i + 1
 
@@ -471,8 +493,7 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
             _fit_em(self, df, models, tree_depth, min_impurity_decrease)
 
 
-def _fit_func(X, y, algo='sem', criterion="aic", max_iter=100, tree_depth=5, class_num=10, validation=False,
-              min_impurity_decrease=0.0, optimal_size=True, data_treatment=False):
+def _fit_func(class_kwargs: dict, fit_kwargs: dict):
     """
     Creates the lrtree model instance and fits it to the data
 
@@ -501,16 +522,12 @@ def _fit_func(X, y, algo='sem', criterion="aic", max_iter=100, tree_depth=5, cla
     :return: the Lrtree model instance
     :rtype: Lrtree
     """
-    model = lrtree.Lrtree(algo=algo, test=False, validation=validation, criterion=criterion, ratios=(0.7,),
-                          class_num=class_num, max_iter=max_iter, data_treatment=data_treatment)
-    model.fit(X=X, y=y, tree_depth=tree_depth, min_impurity_decrease=min_impurity_decrease,
-              optimal_size=optimal_size)
+    model = lrtree.Lrtree(**class_kwargs)
+    model.fit(**fit_kwargs)
     return model
 
 
-def _fit_parallelized(X, y, algo='sem', criterion="aic", nb_init=5, nb_jobs=-1, max_iter=100, tree_depth=5,
-                      class_num=10, min_impurity_decrease=0.0, optimal_size=True, validation=False,
-                      data_treatment=False):
+def _fit_parallelized(class_kwargs: dict, fit_kwargs: dict, nb_init: int, nb_jobs: int = -1):
     """
     A fit function which creates the model instance and fits it,
     where the random initializations are parallelized
@@ -550,16 +567,15 @@ def _fit_parallelized(X, y, algo='sem', criterion="aic", nb_init=5, nb_jobs=-1, 
     :rtype: Lrtree
 """
     models = Parallel(n_jobs=nb_jobs)(
-        delayed(_fit_func)(X=X, y=y, algo=algo, criterion=criterion, max_iter=max_iter, tree_depth=tree_depth,
-                           class_num=class_num, validation=validation, min_impurity_decrease=min_impurity_decrease,
-                           optimal_size=optimal_size, data_treatment=data_treatment) for _
+        delayed(_fit_func)(class_kwargs, fit_kwargs) for _
         in range(nb_init))
-    critere = -np.inf
-    best_model = None
-    for k in range(nb_init):
-        model = models[k]
-        criterion = model.best_criterion
-        if criterion > critere:
-            best_model = model
-            critere = model.best_criterion
+    # critere = -np.inf
+    # best_model = None
+    # for k in range(nb_init):
+    #     model = models[k]
+    #     criterion = model.best_criterion
+    #     if criterion > critere:
+    #         best_model = model
+    #         critere = model.best_criterion
+    best_model = models[np.argmax([model.best_criterion for model in models])]
     return best_model
