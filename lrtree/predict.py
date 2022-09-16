@@ -21,7 +21,7 @@ def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
     # Classes that were predicted : c_map
     liste_cla = np.unique(classes)
 
-    X_df = pd.DataFrame(X)
+    X_df = pd.DataFrame(X).copy()
     X_df["class"] = classes
     X_df["pred"] = 0
 

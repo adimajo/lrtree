@@ -32,9 +32,9 @@
 
 stages:
   - lint
+  - install
   - test
   - security
-  - install
   - sonar_check
   - document
   - deploy
@@ -60,6 +60,22 @@ lint:
       - Pipfile
       - lrtree/**/*
 
+install:
+  stage: install
+  artifacts:
+    paths:
+      - build.env
+      - Pipfile.lock
+  <<: *common_tag
+  <<: *common_python
+  <<: *common_deploy_deb
+  script:
+    - pip install pipenv
+    - pipenv install
+    - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'` >> build.env
+  only:
+    - master
+
 test:
   stage: test
   artifacts:
@@ -69,7 +85,7 @@ test:
   <<: *common_python
   <<: *common_deploy_deb
   script:
-    - pip install pipenv==2021.5.29
+    - pip install pipenv
     - pipenv install -d --skip-lock
     - pipenv run coverage run --source lrtree/ -m pytest
     - pipenv run coverage report
@@ -90,22 +106,6 @@ security:
   script:
     - pip install bandit
     - bandit -r lrtree
-
-install:
-  stage: install
-  artifacts:
-    paths:
-      - build.env
-      - Pipfile.lock
-  <<: *common_tag
-  <<: *common_python
-  <<: *common_deploy_deb
-  script:
-    - pip install pipenv==2021.5.29
-    - pipenv install
-    - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'` >> build.env
-  only:
-    - master
 
 quality_check:
   stage: sonar_check

@@ -12,6 +12,10 @@ import numpy as np
 from loguru import logger
 import sklearn as sk
 
+LOW_VARIATION = "low variation"
+LOW_IMPROVEMENT = "low improvement"
+CHANGED_SEGMENTS = "changed segments"
+
 
 class NotFittedError(sk.exceptions.NotFittedError):
     """Exception class to raise if estimator is used before fitting.
@@ -168,7 +172,9 @@ class Lrtree:
                  class_num: int = 10,
                  max_iter: int = 100,
                  data_treatment: bool = False,
-                 leaves_as_segment = False):
+                 leaves_as_segment: bool = False,
+                 early_stopping=False,
+                 burn_in: int = 30):
         """
         Initializes self by checking if its arguments are appropriately specified.
 
@@ -198,10 +204,38 @@ class Lrtree:
         :param int class_num:   Number of initial segments. Defaults to 10.
         :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each
                                     leaf.
+        :param bool leaves_as_segment: MAP or leaves-as-segment.
+        :param early_stopping: bool (default: False or list of early stopping rules: can be one or several
+            from "low improvement", "low variation", "changed segments").
+        :param int burn_in: number of iterations to "burn".
         """
         _check_input_args(algo, validation, test, ratios, criterion)
+
+        # Fit-specific
+        self.tree_depth = None
+        self.tol = None
+        self.min_impurity_decrease = None
+        self.optimal_size = None
+
         self.criterion = criterion.lower()
         self.algo = algo.lower()
+        self.burn_in = burn_in
+        msg = "Unrecognized early stopping rule, using default (False)."
+        self.early_stopping = []
+        if isinstance(early_stopping, bool):
+            self.early_stopping = [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS] if early_stopping else []
+        elif isinstance(early_stopping, list):
+            early_stopping = [string.lower() for string in early_stopping]
+            for el in early_stopping:
+                if el in [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]:
+                    self.early_stopping.append(el)
+            if not self.early_stopping:
+                logger.error(msg)
+        elif isinstance(early_stopping, str):
+            if early_stopping.lower() in [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]:
+                self.early_stopping = [early_stopping.lower()]
+            else:
+                logger.error(msg)
 
         if not validation and criterion == "gini":
             msg = "Using Gini index on training set might yield an overfitted model."

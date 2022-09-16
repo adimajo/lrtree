@@ -8,6 +8,7 @@ import tikzplotlib
 from loguru import logger
 from sklearn import tree
 from tqdm import tqdm
+from pathlib import Path
 
 from lrtree import Lrtree
 from lrtree.fit import _fit_parallelized
@@ -17,7 +18,7 @@ logger.remove()
 logger.add(tqdm.write)
 os.environ['LOGURU_LEVEL'] = 'ERROR'
 affichage = None  # Affichage de l'arbre obtenu, None, texte ou image
-test = False
+test = True
 
 if test:
     hyperparameters_to_test = {
@@ -153,7 +154,9 @@ if __name__ == "__main__":
                 plt.xlabel(label)
                 plt.ylabel(var)
                 plt.legend(loc='lower right')
+                Path(os.path.join(BASE_DIR, "pictures/")).mkdir(parents=True, exist_ok=True)
                 plt.savefig(os.path.join(BASE_DIR,
                                          f"pictures/{var}_{label}_{seed}.png"))
+                Path(os.path.join(BASE_DIR, "tikz/")).mkdir(parents=True, exist_ok=True)
                 tikzplotlib.save(os.path.join(BASE_DIR,
                                               f"tikz/{var}_{label}_{seed}.tex"))

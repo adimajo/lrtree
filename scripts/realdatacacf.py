@@ -97,15 +97,12 @@ if __name__ == "__main__":
 
     y_total_train = []
     y_total_proba = []
-
     for base in [data_gd, data_cc, data_edm, data_instit, data_auto, data_crca, data_lcl]:
         sub_base = cacf_data(base[Common])
         X_test = traitement_val(sub_base[Used], enc, scaler, merged_cat, discret_cat)
         y_test = sub_base['cible'].to_numpy()
         y_proba = model.predict_proba(X_test)
         logger.info(f"SEM: {roc_auc_score(y_test, y_proba)}")
-
         y_total_train = [*y_total_train, *y_test]
         y_total_proba = [*y_total_proba, *y_proba]
-
-        logger.info(f"SEM total: {roc_auc_score(y_total_train, y_total_proba)}")
+    logger.info(f"SEM total: {roc_auc_score(y_total_train, y_total_proba)}")

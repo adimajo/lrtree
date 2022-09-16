@@ -13,8 +13,7 @@ from verticapy.connect import connect
 from verticapy.connect import new_connection
 
 from lrtree import Lrtree
-from lrtree.discretization import traitement_train
-from lrtree.discretization import traitement_val
+from lrtree.discretization import Processing
 from lrtree.fit import _fit_parallelized
 
 conn_info = {"host": os.environ.get("IP_VERTICA"),

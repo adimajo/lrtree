@@ -16,10 +16,10 @@ twine = "*"
 pipenv_to_requirements = "*"
 vertica-python = "*"
 verticapy = "*"
-tqdm = "*"
 
 [packages]
 numpy = "*"
 pandas = "*"
 loguru = "*"
 scikit-learn = ">=1.0"
+tqdm = "*"
