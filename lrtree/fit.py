@@ -219,13 +219,13 @@ def _fit_tree(self, X_tree, df):
     return link
 
 
-def _fit_sem(self, df, X_tree, models, treatment, i, stopping_criterion):
+def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False):
     link = []
     df["c_map"] = np.random.randint(self.class_num, size=self.n)
     df["c_hat"] = df["c_map"]
 
     # Start of main logic
-    with tqdm(total=self.max_iter, leave=False) as pbar:
+    with tqdm(total=self.max_iter, leave=False, desc="Iterations") as pbar:
         while i < self.max_iter and not stopping_criterion:
             logger.debug(f"Iteration {i}")
             logregs_c_hat = []
@@ -297,7 +297,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i, stopping_criterion):
             i += 1
 
 
-def _fit_em(self, df, models, i, stopping_criterion):
+def _fit_em(self, df, models, i=0, stopping_criterion=False):
     df["c_map"] = np.zeros(self.n)
     df["c_hat"] = df["c_map"]  # Not used in this case
     random_init = np.random.random((len(df), self.class_num))
@@ -536,10 +536,10 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
 
     for _ in tqdm(range(nb_init), desc="!= initialisations"):
         if self.algo == 'sem':
-            _fit_sem(self, df, X_tree, models, treatment, 0, False)
+            _fit_sem(self, df, X_tree, models, treatment)
 
         elif self.algo == 'em':
-            _fit_em(self, df, models, 0, False)
+            _fit_em(self, df, models)
 
 
 def _fit_func(class_kwargs: dict, fit_kwargs: dict):
