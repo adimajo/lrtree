@@ -6,6 +6,12 @@
   image:
     name: docker-remote.registry.saas.cagip.group.gca/library/python:3.8-slim
 
+variables:
+  WORKON_HOME: "$CI_PROJECT_DIR/.cache/venvs"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PIPENV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pipenv"
+  PIPENV_PIPFILE: "$CI_PROJECT_DIR/Pipfile"
+
 .common_tag: &common_tag
   tags:
   - kubernetes
@@ -20,7 +26,7 @@
     - eval $(ssh-agent -s)
 
     # Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
-    - echo "$BOOT_GITLAB_SSH_KEY" |  tr -d ' ' | base64 -d | ssh-add -
+    - echo "$GITLAB_SSH_KEY" |  tr -d ' ' | base64 -d | ssh-add -
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - ssh-keyscan gitlab.ca.cib >> ~/.ssh/known_hosts
@@ -29,6 +35,22 @@
     - apt install -y git
     - git config --global user.name "$GITLAB_USER_NAME"
     - git config --global user.email "$GITLAB_USER_EMAIL"
+
+.global_cache: &global_cache:
+  cache:
+    paths:
+      - .cache/pip
+      - .cache/pipenv
+      - .cache/venvs
+    policy: pull-push
+
+.pull_cache: &pull_cache:
+  cache:
+    paths:
+      - .cache/pip
+      - .cache/pipenv
+      - .cache/venvs
+    policy: pull
 
 stages:
   - lint
@@ -43,15 +65,14 @@ stages:
 
 lint:
   stage: lint
+  <<: *global_cache
   <<: *common_tag
   <<: *common_python
   script:
     - cd lrtree
     - pip install flake8
-    # stop the build if there are Python syntax errors or undefined names
     - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-    - flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+    - flake8 . --count --max-complexity=15 --max-line-length=120 --statistics
   only:
     refs:
       - branches
@@ -66,9 +87,9 @@ install:
     paths:
       - build.env
       - Pipfile.lock
+  <<: *global_cache
   <<: *common_tag
   <<: *common_python
-  <<: *common_deploy_deb
   script:
     - pip install pipenv
     - pipenv install
@@ -78,12 +99,13 @@ install:
 
 test:
   stage: test
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   artifacts:
     paths:
       - coverage.xml
+  <<: *global_cache
   <<: *common_tag
   <<: *common_python
-  <<: *common_deploy_deb
   script:
     - pip install pipenv
     - pipenv install -d --skip-lock
@@ -101,11 +123,12 @@ test:
 
 security:
   stage: security
+  <<: *pull_cache
   <<: *common_python
   <<: *common_tag
   script:
-    - pip install bandit
-    - bandit -r lrtree
+    - pip install pipenv
+    - pipenv run bandit -r lrtree
 
 quality_check:
   stage: sonar_check
@@ -113,8 +136,6 @@ quality_check:
     name: docker-remote.registry.saas.cagip.group.gca/sonarsource/sonar-scanner-cli:4.6
   <<: *common_tag
   variables:
-    SONAR_TOKEN: "${BOOT_SONAR_TOKEN}"
-    SONAR_HOST_URL: "${BOOT_SONAR_INSTANCE}"
     SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar" # Defines the location of the analysis task cache
     GIT_DEPTH: 0 # Tells git to fetch all the branches of the project, required by the analysis task
     SONAR_SCANNER_OPTS: "-Djavax.net.ssl.trustStore=cacerts"
@@ -124,28 +145,27 @@ quality_check:
     - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
     - apk --update add java-common
     - keytool -import -alias mycert -file cacreditagricoleserver.crt -storetype jks -trustcacerts -noprompt -keypass keypass -keystore cacerts -storepass test@123
-    - sonar-scanner -Dsonar.exclusions=tests/**,coverage.xml,setup.py,docs/** -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.qualitygate.wait=true -Dsonar.projectKey=$BOOT_SONAR_KEY -Dsonar.projectVersion=$APPLICATION_TAG_VERSION
+    - sonar-scanner -Dsonar.exclusions=tests/**,coverage.xml,setup.py,docs/** -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.qualitygate.wait=true -Dsonar.projectKey=$SONAR_KEY -Dsonar.projectVersion=$APPLICATION_TAG_VERSION
   only:
    - master
 
 document:
   stage: document
+  <<: *pull_cache
   <<: *common_python
   <<: *common_tag
   script:
     - . ./build.env
-    - pip install pipenv==2021.5.29
+    - pip install pipenv
     - apt update
     - apt install -y make libpq-dev gcc git
     - cd docs
-    - export PIPENV_PIPFILE=../Pipfile
-    - pipenv install -d --skip-lock
     - pipenv run make clean
     - pipenv run make html
     - git config --global http.sslverify false
     - git config --global user.name "$GITLAB_USER_NAME"
     - git config --global user.email "$GITLAB_USER_EMAIL"
-    - git clone https://$BOOT_GITLAB_SRV_ACCOUNT:$BOOT_GITLAB_CAGIP_TOKEN@$BOOT_GITLAB_DOCS_REPO docs_to_publish
+    - git clone https://$GITLAB_SRV_ACCOUNT:$GITLAB_TOKEN@$GITLAB_DOCS_REPO docs_to_publish
     - rm -rf docs_to_publish/public
     - mkdir docs_to_publish/public
     - cp -r build/html/* docs_to_publish/public/
@@ -175,20 +195,20 @@ deploy:
     paths:
       - dist/
   stage: deploy
+  <<: *pull_cache
   <<: *common_tag
   <<: *common_python
   script:
     - apt-get update
     - apt-get install -y wget
-    - pip install pipenv==2021.5.29
-    - pipenv install -d --skip-lock
+    - pip install pipenv
     - pipenv run pipenv_to_requirements
     - pipenv run python3 setup.py sdist bdist_wheel
     - python3 setup.py sdist bdist_wheel
     - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
     - export CURL_CA_BUNDLE=""
-    - 'echo TARGET REPOSITORY : ${BOOT_ARTI_PYPI_SCRATCH_REGISTRY}'
-    - echo ${BOOT_ARTI_PYPI_SCRATCH_REGISTRY} >> .pypirc
+    - 'echo TARGET REPOSITORY : ${ARTI_PYPI_SCRATCH_REGISTRY}'
+    - echo ${ARTI_PYPI_SCRATCH_REGISTRY} >> .pypirc
     - pipenv run twine upload --cert cacreditagricoleserver.crt --config-file .pypirc --repository arti dist/*
   only:
    - master
@@ -199,16 +219,16 @@ promote_staging:
   <<: *ci_tools
   <<: *common_tag
   variables:
-    CREDS: "${BOOT_ARTI_USER}:${BOOT_ARTI_PASSWORD}"
-    SOURCE_REPO: "${BOOT_ARTI_PYPI_SCRATCH_REGISTRY}"
-    TARGET_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
+    CREDS: "${ARTI_USER}:${ARTI_PASSWORD}"
+    SOURCE_REPO: "${ARTI_PYPI_SCRATCH_REGISTRY}"
+    TARGET_REPO: "${ARTI_PYPI_STAGING_REGISTRY}"
     IMAGE: lrtree
   script:
     - . ./build.env
     - 'echo SOURCE REPOSITORY : ${SOURCE_REPO}'
     - 'echo TARGET REPOSITORY : ${TARGET_REPO}'
     - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
-    - if [[ $(curl -S -k -u ${CREDS} -XPOST https://${BOOT_ARTI_REGISTRY}/api/copy/${SOURCE_REPO}/${IMAGE}?to=/${TARGET_REPO} | jq --raw-output '.messages[0].level') = "INFO" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
+    - if [[ $(curl -S -k -u ${CREDS} -XPOST https://${ARTI_REGISTRY}/artifactory/api/copy/${SOURCE_REPO}/${IMAGE}?to=/${TARGET_REPO} | jq --raw-output '.messages[0].level') = "INFO" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
   only:
    - master
 
@@ -218,15 +238,15 @@ promote_stable:
   <<: *ci_tools
   <<: *common_tag
   variables:
-    SOURCE_REPO: "${BOOT_ARTI_PYPI_STAGING_REGISTRY}"
-    TARGET_REPO: "${BOOT_ARTI_PYPI_STABLE_REGISTRY}"
+    SOURCE_REPO: "${ARTI_PYPI_STAGING_REGISTRY}"
+    TARGET_REPO: "${ARTI_PYPI_STABLE_REGISTRY}"
     IMAGE: lrtree
   script:
     - . ./build.env
 #    - apk update
 #    - apk add --no-cache python3 py3-pip
     - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
-    - jfrog config add rt-server --artifactory-url=https://${BOOT_ARTI_REGISTRY} --user=${BOOT_ARTI_USER} --password=${BOOT_ARTI_PASSWORD} --interactive=false
+    - jfrog config add rt-server --artifactory-url=https://${ARTI_REGISTRY} --user=${ARTI_USER} --password=${ARTI_PASSWORD} --interactive=false
     - jfrog config use rt-server
     - jfrog rt ping
     - jfrog rt pip-config --server-id-resolve rt-server --repo-resolve ${TARGET_REPO}

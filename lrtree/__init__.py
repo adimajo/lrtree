@@ -216,11 +216,12 @@ class Lrtree:
         self.tol = None
         self.min_impurity_decrease = None
         self.optimal_size = None
+        self.solver = None
 
         self.criterion = criterion.lower()
         self.algo = algo.lower()
         self.burn_in = burn_in
-        msg = "Unrecognized early stopping rule, using default (False)."
+        msg = f"Unrecognized early stopping rule, must be in [{[LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]}]."
         self.early_stopping = []
         if isinstance(early_stopping, bool):
             self.early_stopping = [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS] if early_stopping else []
@@ -231,11 +232,13 @@ class Lrtree:
                     self.early_stopping.append(el)
             if not self.early_stopping:
                 logger.error(msg)
+                raise ValueError(msg)
         elif isinstance(early_stopping, str):
             if early_stopping.lower() in [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]:
                 self.early_stopping = [early_stopping.lower()]
             else:
                 logger.error(msg)
+                raise ValueError(msg)
 
         if not validation and criterion == "gini":
             msg = "Using Gini index on training set might yield an overfitted model."

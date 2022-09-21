@@ -17,10 +17,12 @@ from sklearn.preprocessing import StandardScaler
 def bin_data_cate_train(data: pd.DataFrame, var_cible: str, categorical=None):
     # if categorical is None:
     #     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
+    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET",
+    #                    "CRED_Null_Group_Dest_fin_Conso",
     #                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers",
     #                    "CRED_Null_Group_bien_fin_Conso",
-    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
+    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers",
+    #                    "CRED_Null_Group_interv_Conso",
     #                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
     #                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
     #                    "TOP_SEUIL_New_def", "segment", "incident"]
@@ -481,10 +483,12 @@ def green_clust(X: pd.DataFrame, var: str, var_predite: str, num_clusters: int) 
 def categorie_data_labels(data: pd.DataFrame, data_val: pd.DataFrame, categorical=None) -> (pd.DataFrame, pd.DataFrame):
     # if categorical is None:
     #     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
+    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET",
+    #                    "CRED_Null_Group_Dest_fin_Conso",
     #                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers",
     #                    "CRED_Null_Group_bien_fin_Conso",
-    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
+    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers",
+    #                    "CRED_Null_Group_interv_Conso",
     #                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
     #                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
     #                    "TOP_SEUIL_New_def", "segment", "incident"]
@@ -521,13 +525,16 @@ def categorie_data_labels(data: pd.DataFrame, data_val: pd.DataFrame, categorica
     return pd.concat([X_num, X_cat], axis=1), pd.concat([X_val_num, X_val_cat], axis=1)
 
 
-def categorie_data_bin_train_test(data: pd.DataFrame, data_val: pd.DataFrame, categorical=None) -> (pd.DataFrame, pd.DataFrame, list):
+def categorie_data_bin_train_test(data: pd.DataFrame,
+                                  data_val: pd.DataFrame, categorical=None) -> (pd.DataFrame, pd.DataFrame, list):
     # if categorical is None:
     #     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
+    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET",
+    #                    "CRED_Null_Group_Dest_fin_Conso",
     #                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers",
     #                    "CRED_Null_Group_bien_fin_Conso",
-    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
+    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers",
+    #                    "CRED_Null_Group_interv_Conso",
     #                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
     #                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
     #                    "TOP_SEUIL_New_def", "segment", "incident"]
@@ -765,7 +772,7 @@ class Processing:
         X, self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat, len_col_num = traitement_train(
             data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize
         )
-        assert len_col_num == len(self.num_cols)
+        assert len_col_num == len(self.num_cols)  # nosec
         self.X_train = X
 
     def fit_transform(self, X: pd.DataFrame, categorical: list):

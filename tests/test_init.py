@@ -73,6 +73,18 @@ def test_criterion():
         lrtree.Lrtree(criterion="wrong criterion")
 
 
+def test_early_stopping():
+    lrtree.Lrtree(early_stopping=["low variation"])
+    lrtree.Lrtree(early_stopping="low variation")
+
+    with pytest.raises(ValueError):
+        lrtree.Lrtree(early_stopping=[])
+    with pytest.raises(ValueError):
+        lrtree.Lrtree(early_stopping=['toto'])
+    with pytest.raises(ValueError):
+        lrtree.Lrtree(early_stopping='toto')
+
+
 def test_gini_penalized(caplog):
     lrtree.Lrtree(validation=False,
                     test=True,

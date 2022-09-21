@@ -16,9 +16,8 @@ from lrtree.fit import _fit_parallelized
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 logger.remove()
 logger.add(tqdm.write)
-os.environ['LOGURU_LEVEL'] = 'ERROR'
 affichage = None  # Affichage de l'arbre obtenu, None, texte ou image
-test = True
+test = os.environ.get("DEBUG", False)
 
 if test:
     hyperparameters_to_test = {

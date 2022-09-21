@@ -17,6 +17,7 @@ pipenv_to_requirements = "*"
 vertica-python = "*"
 verticapy = "*"
 kaggle-cli = "*"
+pyinstrument = "*"
 
 [packages]
 numpy = "*"

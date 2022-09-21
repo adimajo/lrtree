@@ -21,16 +21,16 @@ class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
         if y.nunique() == 1:
             self._single_class_label = y.iloc[0]
             self.n_features_in_ = X.shape[1]
+            return self
         else:
             return super().fit(X, y, weights)
-        return self
 
     def predict(self, X):
         """
         Predict the single class
         """
         if self._single_class_label is not None:
-            np.full(X.shape[0], self._single_class_label)
+            return np.full(X.shape[0], self._single_class_label)
         else:
             return super().predict(X)
 
@@ -67,7 +67,7 @@ class LogRegSegment(PossiblyOneClassReg):
 
         return super().fit(**kwargs)
 
-    def predict(self, X):
+    def predict(self, X) -> np.ndarray:
         if self.discretization:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)
@@ -77,7 +77,7 @@ class LogRegSegment(PossiblyOneClassReg):
                                         self.categories["discret_cat"])
         return super().predict(X.to_numpy())
 
-    def predict_proba(self, X):
+    def predict_proba(self, X) -> np.ndarray:
         if self.discretization:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)
@@ -85,5 +85,4 @@ class LogRegSegment(PossiblyOneClassReg):
                                         self.categories["enc"],
                                         self.categories["merged_cat"],
                                         self.categories["discret_cat"])
-
         return super().predict_proba(X.to_numpy())

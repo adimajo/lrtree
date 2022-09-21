@@ -1,6 +1,7 @@
 """
 fit module for the Lrtree class
 """
+import os
 import warnings
 from copy import deepcopy
 
@@ -14,9 +15,10 @@ from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 
 import lrtree
-from lrtree.logreg import LogRegSegment
-from lrtree.discretization import bin_data_cate_train, categorie_data_bin_test
 from lrtree import LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS
+from lrtree.discretization import Processing
+from lrtree.discretization import categorie_data_bin_test
+from lrtree.logreg import LogRegSegment
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -98,8 +100,9 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
         model = model_c_map[k]
         idx = df["c_map"] == c_iter
         if self.validation:
-            y_validate = df[idx & df.index.isin(self.validate_rows)]["y"].tolist()
-            X_validate = df[idx & df.index.isin(self.validate_rows)].drop(['y', 'c_hat', 'c_map'], axis=1)
+            validate_rows = idx & df.index.isin(self.validate_rows)
+            y_validate = df[validate_rows]["y"].tolist()
+            X_validate = df[validate_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
             if self.data_treatment:
                 X_validate = X_validate.rename(columns=self.column_names)
                 X_validate = categorie_data_bin_test(X_validate,
@@ -107,8 +110,9 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
                                                      treatment[c_iter]["merged_cat"],
                                                      treatment[c_iter]["discret_cat"])
         else:
-            y_validate = df[idx & df.index.isin(self.train_rows)]["y"].tolist()
-            X_validate = df[idx & df.index.isin(self.train_rows)].drop(['y', 'c_hat', 'c_map'], axis=1)
+            train_rows = idx & df.index.isin(self.train_rows)
+            y_validate = df[train_rows]["y"].tolist()
+            X_validate = df[train_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
             if self.data_treatment:
                 X_validate = categorie_data_bin_test(X_validate.rename(columns=self.column_names),
                                                      treatment[c_iter]["enc"],
@@ -193,15 +197,17 @@ def _draw_c_hat(link, X_tree, df, predictions_log, c_iter_to_keep):
 
 
 def _fit_tree(self, X_tree, df):
-    X = X_tree[df.index.isin(self.train_rows)].to_numpy()
+    train_rows = df.index.isin(self.train_rows)
+    X = X_tree[train_rows].to_numpy()
     # Building the tree
     clf = DecisionTreeClassifier(max_depth=self.tree_depth, min_impurity_decrease=self.min_impurity_decrease).fit(
-        X, df[df.index.isin(self.train_rows)]["c_hat"])
+        X, df[train_rows]["c_hat"])
     link = clf
 
     if self.optimal_size and self.validation:
-        X_validate = X_tree[df.index.isin(self.validate_rows)].to_numpy()
-        path = clf.cost_complexity_pruning_path(X, df[df.index.isin(self.train_rows)]["c_hat"])
+        validate_rows = df.index.isin(self.validate_rows)
+        X_validate = X_tree[validate_rows].to_numpy()
+        path = clf.cost_complexity_pruning_path(X, df[train_rows]["c_hat"])
         alphas = path.ccp_alphas
 
         # Tree propositions, with more or less pruning
@@ -211,8 +217,8 @@ def _fit_tree(self, X_tree, df):
         for a in range(len(alphas)):
             alpha = alphas[a]
             tree = DecisionTreeClassifier(ccp_alpha=alpha)
-            tree.fit(X, df[df.index.isin(self.train_rows)]["c_hat"])
-            score = tree.score(X_validate, df[df.index.isin(self.validate_rows)]["c_hat"])
+            tree.fit(X, df[train_rows]["c_hat"])
+            score = tree.score(X_validate, df[validate_rows]["c_hat"])
             # Choosing the tree with the best accuracy on the validation set
             if score > best_score:
                 link = tree
@@ -225,7 +231,8 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
     df["c_hat"] = df["c_map"]
 
     # Start of main logic
-    with tqdm(total=self.max_iter, leave=False, desc="Iterations") as pbar:
+    with tqdm(total=self.max_iter, leave=False, desc="Iterations",
+              disable=os.environ.get("TQDM_DISABLE", False)) as pbar:
         while i < self.max_iter and not stopping_criterion:
             logger.debug(f"Iteration {i}")
             logregs_c_hat = []
@@ -235,7 +242,8 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
             c_iter_to_keep = np.ones(predictions_log.shape[1], dtype=bool)
             # Renumbering
             dict_of_values = {v: k for k, v in enumerate(np.unique(df["c_hat"]))}
-            df["c_hat"] = df["c_hat"].apply(lambda x, values=dict_of_values: values[x])
+            # df["c_hat"] = df["c_hat"].apply(lambda x, values=dict_of_values: values[x])
+            df.replace({"c_hat": dict_of_values}, inplace=True)
 
             # Getting p(y | x, c_hat) and filling the probabilities
             for index, c_iter in enumerate(np.unique(df["c_hat"])):
@@ -260,7 +268,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                 train_data = df[idx & df.index.isin(self.train_rows)]
                 y = train_data['y']
                 X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
-                model = LogRegSegment(penalty='l1', solver='saga', C=0.01, tol=1e-2, warm_start=False)
+                model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-3, warm_start=True)
                 logreg = model.fit(X=X, y=y)
 
                 logregs_c_map.append(logreg)
@@ -305,7 +313,7 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
     proportion = random_init / row_sums[:, np.newaxis]
 
     # MCMC steps
-    with tqdm(total=self.max_iter, leave=False) as pbar:
+    with tqdm(total=self.max_iter, leave=False, disable=os.environ.get("TQDM_DISABLE", False)) as pbar:
         while i < self.max_iter and not stopping_criterion:
             logregs_c_hat = []
             logregs_c_map = []
@@ -316,13 +324,13 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
             for c_iter in range(self.class_num):
                 weights = proportion[:, c_iter]
                 y = df['y']
-                X = df.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
+                X = df.drop(['y', 'c_map', 'c_hat'], axis=1)
                 model = models[c_iter]
-                logreg = model.fit(X, y, weights)
+                logreg = model.fit(X=X, y=y, weights=weights)
                 models[c_iter] = model
 
                 logregs_c_hat = np.append(logregs_c_hat, logreg)
-                to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1).to_numpy()
+                to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
                 predictions_log[:, c_iter] = logreg.predict_proba(to_predict)[:, 1]
 
             predictions_log[np.isnan(predictions_log)] = 0
@@ -334,7 +342,7 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
             for q in range(len(df)):
                 for j in range(self.class_num):
                     leaf.append(j)
-                    train_data.append(X[q])
+                    train_data.append(X.iloc[q, :])
                     weights.append(proportion[q][j])
             clf = DecisionTreeClassifier(max_depth=self.tree_depth, min_impurity_decrease=self.min_impurity_decrease)
             clf.fit(train_data, leaf, weights)
@@ -343,8 +351,8 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
             # New matric of proportions p_theta_1|x
             y_ext = np.array([df["y"], ] * predictions_log.shape[1]).transpose()
             # p_theta_y|x
-            masked_predictions_log = np.ma.masked_array(predictions_log, mask=(1 - y_ext)).filled(0) + np.ma.masked_array(
-                1 - predictions_log, mask=y_ext).filled(0)
+            masked_predictions_log = np.ma.masked_array(predictions_log, mask=(
+                1 - y_ext)).filled(0) + np.ma.masked_array(1 - predictions_log, mask=y_ext).filled(0)
             # p_beta_c|x * p_theta_y|x
             matrix = np.multiply(link.predict_proba(X), masked_predictions_log)
             row_sums = matrix.sum(axis=1)
@@ -360,9 +368,9 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
                 idx = df["c_map"] == np.sort(df["c_map"].unique())[c_iter]
                 train_data = df[idx]
                 y = train_data['y']
-                X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1).to_numpy()
-                model = LogRegSegment(penalty='l2', C=1, tol=1e-2, warm_start=False)
-                logreg = model.fit(X, y)
+                X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
+                model = LogRegSegment(penalty='l2', solver=self.solver, C=1e-2, tol=1e-3, warm_start=True)
+                logreg = model.fit(X=X, y=y)
 
                 logregs_c_map.append(logreg)
                 model_c_map.append(model)
@@ -396,8 +404,8 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
                     stopping_criterion = True
                     logger.info(f"{STOPPED_AT_ITERATION} {i}")
 
-        pbar.update(1)
-        i += 1
+            pbar.update(1)
+            i += 1
 
 
 def _update_best(self, i, treatment, df, logregs_c_map, link):
@@ -456,10 +464,10 @@ def _init_models(self):
     models = {}
 
     for c_iter in range(self.class_num):
-        # If penalty ='l1', solver='liblinear' or 'saga' (large datasets),
-        # default ’lbfgs’, C small leads to stronger regularization
-        models[c_iter] = LogRegSegment(penalty='l2', solver='saga', C=0.1, tol=1e-2,
-                                       warm_start=False, discretization=self.data_treatment)
+        # If penalty ='l1', solver=self.solver or self.solver (large datasets),
+        # default ’sag’, C small leads to stronger regularization
+        models[c_iter] = LogRegSegment(penalty='l2', solver=self.solver, C=1e-2, tol=1e-2,
+                                       warm_start=True, discretization=self.data_treatment)
 
     return models
 
@@ -485,15 +493,17 @@ def _init_fit(self, X, y):
     treatment = {}
     if self.data_treatment:
         # Data without treatment (one hot on categorical variables), used for the tree
-        X_tree, enc_global = bin_data_cate_train(X.copy(), "y")
-        treatment["global"] = enc_global
+        processing = Processing(target=self.target)
+        X_tree = processing.fit_transform(X=X.copy(), categorical=self.categorical)
+        # X_tree, enc_global = bin_data_cate_train(X.copy(), "y", categorical=self.processing.categorical)
+        treatment["global"] = processing.enc
     else:
         X_tree = df.drop(['y'], axis=1)
     return df, X_tree, models, treatment
 
 
-def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decrease: float = 0.0,
-        optimal_size: bool = True, tol: float = 0.005):
+def fit(self, X, y, solver: str = "lbfgs", nb_init: int = 1, tree_depth: int = 10,
+        min_impurity_decrease: float = 0.0, optimal_size: bool = True, tol: float = 0.005):
     """
     Fits the Lrtree object.
 
@@ -505,6 +515,8 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
         Boolean (0/1) labels of the observations. Must be of
         the same length as X
         (numpy "numeric" array).
+    :param str solver:
+        sklearn's solver for LogisticRegression (default 'lbfgs')
     :param int nb_init:
         Number of different random initializations
     :param int tree_depth:
@@ -520,6 +532,7 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
     self.tol = tol
     self.min_impurity_decrease = min_impurity_decrease
     self.optimal_size = optimal_size
+    self.solver = solver
 
     if self.data_treatment and type(X) != pd.DataFrame:
         msg = "A numpy array cannot have mixed-type input, so using data_treatment is prohibited"
@@ -534,7 +547,7 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
 
     df, X_tree, models, treatment = _init_fit(self, X, y)
 
-    for _ in tqdm(range(nb_init), desc="!= initialisations"):
+    for _ in tqdm(range(nb_init), desc="!= initialisations", disable=os.environ.get("TQDM_DISABLE", False)):
         if self.algo == 'sem':
             _fit_sem(self, df, X_tree, models, treatment)
 
@@ -542,7 +555,7 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
             _fit_em(self, df, models)
 
 
-def _fit_func(class_kwargs: dict, fit_kwargs: dict):
+def _fit_func(fit_kwargs: dict, class_kwargs: dict = None):
     """
     Creates the lrtree model instance and fits it to the data
 
@@ -571,12 +584,15 @@ def _fit_func(class_kwargs: dict, fit_kwargs: dict):
     :return: the Lrtree model instance
     :rtype: Lrtree
     """
-    model = lrtree.Lrtree(**class_kwargs)
+    if class_kwargs is not None:
+        model = lrtree.Lrtree(**class_kwargs)
+    else:
+        model = lrtree.Lrtree()
     model.fit(**fit_kwargs)
     return model
 
 
-def _fit_parallelized(class_kwargs: dict, fit_kwargs: dict, nb_init: int, nb_jobs: int = -1):
+def _fit_parallelized(fit_kwargs: dict, class_kwargs: dict = None, nb_init: int = 2, nb_jobs: int = -1):
     """
     A fit function which creates the model instance and fits it,
     where the random initializations are parallelized
@@ -616,7 +632,7 @@ def _fit_parallelized(class_kwargs: dict, fit_kwargs: dict, nb_init: int, nb_job
     :rtype: Lrtree
 """
     models = Parallel(n_jobs=nb_jobs)(
-        delayed(_fit_func)(class_kwargs, fit_kwargs) for _
+        delayed(_fit_func)(fit_kwargs=fit_kwargs, class_kwargs=class_kwargs) for _
         in range(nb_init))
     best_model = models[np.argmax([model.best_criterion for model in models])]
     return best_model
