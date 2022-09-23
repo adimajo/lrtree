@@ -1,8 +1,8 @@
 import numpy as np
 import sklearn as sk
 from sklearn.preprocessing import OneHotEncoder
-from lrtree.discretization import categorie_data_bin_train
-from lrtree.discretization import categorie_data_bin_test
+from lrtree.discretization import _categorie_data_bin_train
+from lrtree.discretization import _categorie_data_bin_test
 
 
 class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
@@ -54,12 +54,13 @@ class LogRegSegment(PossiblyOneClassReg):
         self.categories = None
         if 'discretization' in kwargs:
             self.discretization = kwargs['discretization']
+            self.column_names = kwargs['column_names']
             self.categories = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
 
     def fit(self, **kwargs):
         if self.discretization:
             train_data = kwargs['X'].rename(columns=self.column_names)
-            train_data, labels, enc, merged_cat, discret_cat = categorie_data_bin_train(
+            train_data, labels, enc, merged_cat, discret_cat = _categorie_data_bin_train(
                 train_data, var_cible="y")
             self.categories["enc"] = enc
             self.categories["merged_cat"] = merged_cat
@@ -71,18 +72,18 @@ class LogRegSegment(PossiblyOneClassReg):
         if self.discretization:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)
-            X = categorie_data_bin_test(X,
-                                        self.categories["enc"],
-                                        self.categories["merged_cat"],
-                                        self.categories["discret_cat"])
+            X = _categorie_data_bin_test(X,
+                                         self.categories["enc"],
+                                         self.categories["merged_cat"],
+                                         self.categories["discret_cat"])
         return super().predict(X.to_numpy())
 
     def predict_proba(self, X) -> np.ndarray:
         if self.discretization:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)
-            X = categorie_data_bin_test(X,
-                                        self.categories["enc"],
-                                        self.categories["merged_cat"],
-                                        self.categories["discret_cat"])
+            X = _categorie_data_bin_test(X,
+                                         self.categories["enc"],
+                                         self.categories["merged_cat"],
+                                         self.categories["discret_cat"])
         return super().predict_proba(X.to_numpy())

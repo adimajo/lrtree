@@ -16,8 +16,7 @@ from tqdm import tqdm
 
 import lrtree
 from lrtree import LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS
-from lrtree.discretization import Processing
-from lrtree.discretization import categorie_data_bin_test
+from lrtree.discretization import _categorie_data_bin_train, _categorie_data_bin_test, bin_data_cate_train, bin_data_cate_test
 from lrtree.logreg import LogRegSegment
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -105,19 +104,19 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
             X_validate = df[validate_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
             if self.data_treatment:
                 X_validate = X_validate.rename(columns=self.column_names)
-                X_validate = categorie_data_bin_test(X_validate,
-                                                     treatment[c_iter]["enc"],
-                                                     treatment[c_iter]["merged_cat"],
-                                                     treatment[c_iter]["discret_cat"])
+                X_validate = _categorie_data_bin_test(X_validate,
+                                                      treatment[c_iter]["enc"],
+                                                      treatment[c_iter]["merged_cat"],
+                                                      treatment[c_iter]["discret_cat"])
         else:
             train_rows = idx & df.index.isin(self.train_rows)
             y_validate = df[train_rows]["y"].tolist()
             X_validate = df[train_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
             if self.data_treatment:
-                X_validate = categorie_data_bin_test(X_validate.rename(columns=self.column_names),
-                                                     treatment[c_iter]["enc"],
-                                                     treatment[c_iter]["merged_cat"],
-                                                     treatment[c_iter]["discret_cat"])
+                X_validate = _categorie_data_bin_test(X_validate.rename(columns=self.column_names),
+                                                      treatment[c_iter]["enc"],
+                                                      treatment[c_iter]["merged_cat"],
+                                                      treatment[c_iter]["discret_cat"])
         if X_validate.shape[0] > 0:
             y_pred = model.predict_proba(X_validate)[:, 1]
             lengths_pred.append(X_validate.shape[0])
@@ -181,8 +180,7 @@ def find_leaves(link, X):
             stack.append((children_right[node_id], depth + 1))
         else:
             is_leaves[node_id] = True
-    path = link.decision_path(X)
-    return np.argmax(path[:, is_leaves], axis=1)
+    return link.decision_path(X)[:, is_leaves]
 
 
 def _draw_c_hat(link, X_tree, df, predictions_log, c_iter_to_keep):
@@ -232,7 +230,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
 
     # Start of main logic
     with tqdm(total=self.max_iter, leave=False, desc="Iterations",
-              disable=os.environ.get("TQDM_DISABLE", False)) as pbar:
+              disable=os.environ.get("TQDM_DISABLE", "False").lower() in ('true', '1', 't')) as pbar:
         while i < self.max_iter and not stopping_criterion:
             logger.debug(f"Iteration {i}")
             logregs_c_hat = []
@@ -268,9 +266,9 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                 train_data = df[idx & df.index.isin(self.train_rows)]
                 y = train_data['y']
                 X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
-                model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-3, warm_start=True)
+                model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-3, warm_start=True,
+                                      discretization=self.data_treatment, column_names=self.column_names)
                 logreg = model.fit(X=X, y=y)
-
                 logregs_c_map.append(logreg)
                 model_c_map.append(model)
 
@@ -289,18 +287,19 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
 
             # c_map calculation
             if self.leaves_as_segment:
-                new_cmap = find_leaves(link, X_tree.to_numpy())
+                path = find_leaves(link, X_tree.to_numpy())
+                new_cmap = np.asarray(path.argmax(axis=1)).ravel()
             else:
-                new_cmap = np.argmax(tree_pred, axis=1)
+                new_cmap = tree_pred.argmax(axis=1)
             prop_changed_segments = 1 - np.sum(new_cmap == df['c_map'].values) / len(new_cmap)
             logger.info(f"Proportion of changed segments: {prop_changed_segments:.3}")
-            logger.info(f"Number of distinct segments: {np.unique(new_cmap)}")
 
             if CHANGED_SEGMENTS in self.early_stopping and i >= self.burn_in and prop_changed_segments <= self.tol:
                 # TODO: does not take into account relabelling
                 stopping_criterion = True
                 logger.info(f"{STOPPED_AT_ITERATION} {i}, the proportion of changed segments is below 'tol'.")
             df["c_map"] = new_cmap
+            logger.info(f"Number of distinct segments: {df['c_map'].nunique()}")
             pbar.update(1)
             i += 1
 
@@ -313,7 +312,8 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
     proportion = random_init / row_sums[:, np.newaxis]
 
     # MCMC steps
-    with tqdm(total=self.max_iter, leave=False, disable=os.environ.get("TQDM_DISABLE", False)) as pbar:
+    with tqdm(total=self.max_iter, leave=False,
+              disable=os.environ.get("TQDM_DISABLE", "False").lower() in ('true', '1', 't')) as pbar:
         while i < self.max_iter and not stopping_criterion:
             logregs_c_hat = []
             logregs_c_map = []
@@ -467,7 +467,8 @@ def _init_models(self):
         # If penalty ='l1', solver=self.solver or self.solver (large datasets),
         # default ’sag’, C small leads to stronger regularization
         models[c_iter] = LogRegSegment(penalty='l2', solver=self.solver, C=1e-2, tol=1e-2,
-                                       warm_start=True, discretization=self.data_treatment)
+                                       warm_start=True, discretization=self.data_treatment,
+                                       column_names=self.column_names)
 
     return models
 
@@ -493,17 +494,17 @@ def _init_fit(self, X, y):
     treatment = {}
     if self.data_treatment:
         # Data without treatment (one hot on categorical variables), used for the tree
-        processing = Processing(target=self.target)
-        X_tree = processing.fit_transform(X=X.copy(), categorical=self.categorical)
-        # X_tree, enc_global = bin_data_cate_train(X.copy(), "y", categorical=self.processing.categorical)
-        treatment["global"] = processing.enc
+        # processing = Processing(target=self.target)
+        # X_tree = processing.fit_transform(X=X.copy(), categorical=self.categorical)
+        X_tree, enc_global = bin_data_cate_train(X.copy(), "y", categorical=self.categorical)
+        treatment["global"] = enc_global
     else:
         X_tree = df.drop(['y'], axis=1)
     return df, X_tree, models, treatment
 
 
 def fit(self, X, y, solver: str = "lbfgs", nb_init: int = 1, tree_depth: int = 10,
-        min_impurity_decrease: float = 0.0, optimal_size: bool = True, tol: float = 0.005):
+        min_impurity_decrease: float = 0.0, optimal_size: bool = True, tol: float = 0.005, categorical=None):
     """
     Fits the Lrtree object.
 
@@ -527,17 +528,25 @@ def fit(self, X, y, solver: str = "lbfgs", nb_init: int = 1, tree_depth: int = 1
         Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
     :param float tol:
         Tolerance to observe an improvement and stop early
+    :param list categorical:
+        List of names of categorical features
     """
     self.tree_depth = tree_depth
     self.tol = tol
     self.min_impurity_decrease = min_impurity_decrease
     self.optimal_size = optimal_size
     self.solver = solver
+    self.categorical = categorical
 
+    if isinstance(X, pd.DataFrame):
+        self.column_names = X.columns.to_list()
     if self.data_treatment and type(X) != pd.DataFrame:
         msg = "A numpy array cannot have mixed-type input, so using data_treatment is prohibited"
         logger.error(msg)
         raise ValueError(msg)
+    elif self.data_treatment and not self.categorical:
+        msg = "You did not provide categorical columns name, assuming only numerical columns."
+        logger.info(msg)
     else:
         _check_args(X, y)
 
@@ -547,7 +556,8 @@ def fit(self, X, y, solver: str = "lbfgs", nb_init: int = 1, tree_depth: int = 1
 
     df, X_tree, models, treatment = _init_fit(self, X, y)
 
-    for _ in tqdm(range(nb_init), desc="!= initialisations", disable=os.environ.get("TQDM_DISABLE", False)):
+    for _ in tqdm(range(nb_init), desc="!= initialisations",
+                  disable=os.environ.get("TQDM_DISABLE", "False").lower() in ('true', '1', 't')):
         if self.algo == 'sem':
             _fit_sem(self, df, X_tree, models, treatment)
 

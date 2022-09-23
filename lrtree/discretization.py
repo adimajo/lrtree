@@ -28,10 +28,11 @@ def bin_data_cate_train(data: pd.DataFrame, var_cible: str, categorical=None):
     #                    "TOP_SEUIL_New_def", "segment", "incident"]
     X = data.copy()
     to_change = []
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X.loc[:, column] = X[column].astype(str)
+    if categorical:
+        for column in categorical:
+            if column in X.columns:
+                to_change.append(column)
+                X.loc[:, column] = X[column].astype(str)
     for column in X.columns:
         if column not in categorical and column != var_cible:
             X.loc[:, column] = X[column].astype(np.float64)
@@ -41,10 +42,11 @@ def bin_data_cate_train(data: pd.DataFrame, var_cible: str, categorical=None):
     X_cat = enc.fit_transform(X[to_change])
     X_cat = pd.DataFrame(X_cat)
     X_num = X.drop(to_change, axis=1)
-    for column in X_num.columns:
-        col = X_num[column]
-        if col.dtypes not in ("int32", "int64", "float32", "float64"):
-            X_num.loc[:, column] = X_num[column].astype(np.int32)
+    if not X_num.columns.empty:
+        for column in X_num.columns:
+            col = X_num[column]
+            if col.dtypes not in ("int32", "int64", "float32", "float64"):
+                X_num.loc[:, column] = X_num[column].astype(np.int32)
 
     # Need to reset the index for the concat to work well
     X_cat = X_cat.reset_index(drop=True)
@@ -271,7 +273,7 @@ def discretize_feature(X: pd.DataFrame, var: str, var_predite: str):
     return X, binning
 
 
-def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, discretize=True):
+def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, discretize=True):
     """
     Binarise the categorical variables (after merging categories)
     Returns the data, the encoder and the column labels
@@ -284,12 +286,13 @@ def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, di
     X = data.copy()
     to_change = []
     merged_cat = {}
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X.loc[:, column] = X[column].astype(str)
-            X, dico = grouping(X, column, var_cible)
-            merged_cat[column] = dico
+    if categorical:
+        for column in categorical:
+            if column in X.columns:
+                to_change.append(column)
+                X.loc[:, column] = X[column].astype(str)
+                X, dico = grouping(X, column, var_cible)
+                merged_cat[column] = dico
 
     discret_cat = {}
     if discretize:
@@ -303,33 +306,42 @@ def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, di
     if var_cible in X.columns:
         X.drop([var_cible], axis=1, inplace=True)
 
+    X_cat = None
     enc = OneHotEncoder(sparse=False, handle_unknown='ignore')
-    X_cat = enc.fit_transform(X[to_change])
-    labels_cat = enc.get_feature_names_out()
-    X_cat = pd.DataFrame(X_cat)
+    if to_change:
+        X_cat = enc.fit_transform(X[to_change])
+        labels_cat = enc.get_feature_names_out()
+        X_cat = pd.DataFrame(X_cat)
+        X_cat = X_cat.reset_index(drop=True)
 
     # Used when we had decided to keep the continuous numerical variables
     X_num = X.drop(to_change, axis=1)
+    X_num_transformed = None
     col_num = X_num.columns
     labels_num = []
-    for column in col_num:
-        labels_num.append(column)
-        col = X_num[column]
-        if col.dtypes not in ("int32", "int64", "float32", "float64"):
-            X_num.loc[:, column] = X_num[column].astype(np.int32)
     scaler = StandardScaler()
-    X_num_transformed = scaler.fit_transform(X_num)
+    if not col_num.empty:
+        for column in col_num:
+            labels_num.append(column)
+            col = X_num[column]
+            if col.dtypes not in ("int32", "int64", "float32", "float64"):
+                X_num.loc[:, column] = X_num[column].astype(np.int32)
+        X_num_transformed = scaler.fit_transform(X_num)
 
-    # Need to reset the index for the concat to work well
-    X_cat = X_cat.reset_index(drop=True)
-
-    X_train = pd.concat([pd.DataFrame(X_num_transformed), X_cat], axis=1, ignore_index=True)
-    labels = [*labels_num, *labels_cat]
+    if X_cat is not None and X_num_transformed is not None:
+        X_train = pd.concat([pd.DataFrame(X_num_transformed), X_cat], axis=1, ignore_index=True)
+        labels = [*labels_num, *labels_cat]
+    elif X_cat:
+        X_train = X_cat
+        labels = labels_cat
+    else:
+        X_train = X_num
+        labels = labels_num
     return X_train, labels, enc, merged_cat, discret_cat, scaler, len(col_num)
 
 
-def categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScaler, merged_cat: dict,
-                            discret_cat: dict, categorical=None, discretize=False) -> pd.DataFrame:
+def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScaler, merged_cat: dict,
+                             discret_cat: dict, categorical=None, discretize=False) -> pd.DataFrame:
     """
     Data treatment of the test data, using the method (merged categories, discretisation, OneHotEncoder) learned on
     the train data
@@ -358,7 +370,6 @@ def categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: 
     # Merging the categories
     X_val.replace(merged_cat, inplace=True)
     if discretize:
-        logger.info("Here")
         for column in X_val.columns:
             if column not in set(list(merged_cat.keys()) + categorical):
                 to_change.append(column)
@@ -719,9 +730,9 @@ def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScale
     if "Defaut_12_Mois_contagion" in X_val.columns:
         X_val.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
     X_val = extreme_values(X_val, missing=False)
-    X_val = categorie_data_bin_test(X_val, enc, scaler,
-                                    merged_cat, discret_cat,
-                                    categorical, discretize)
+    X_val = _categorie_data_bin_test(X_val, enc, scaler,
+                                     merged_cat, discret_cat,
+                                     categorical, discretize)
     return X_val
 
 
@@ -740,7 +751,7 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
     if target in X.columns and X[target].dtypes == "object":
         X[target].replace(["N", "O"], [int(0), int(1)], inplace=True)
     X = extreme_values(X, missing=False)
-    X, labels, enc, merged_cat, discrete_cat, scaler, len_col_num = categorie_data_bin_train(
+    X, labels, enc, merged_cat, discrete_cat, scaler, len_col_num = _categorie_data_bin_train(
         X,
         var_cible=target,
         categorical=categorical,
@@ -761,13 +772,19 @@ class Processing:
     def fit(self, X: pd.DataFrame, categorical: list):
         self.cat_cols = categorical
         # Check if all categorical are inside
-        for col in self.cat_cols:
-            if col not in X.columns:
-                msg = f"Column {col} specified in argument 'categorical' not present."
-                logger.error(msg)
-                raise ValueError(msg)
-        # Calculate remaining columns
-        self.num_cols = [col for col in X.columns.to_list() if col not in self.cat_cols + [self.target]]
+        if self.cat_cols:
+            for col in self.cat_cols:
+                if col not in X.columns:
+                    msg = f"Column {col} specified in argument 'categorical' not present."
+                    logger.error(msg)
+                    raise ValueError(msg)
+            # Calculate remaining columns
+            self.num_cols = [col for col in X.columns.to_list() if col not in self.cat_cols + [self.target]]
+        else:
+            self.num_cols = X.columns.to_list()
+            if self.target in self.num_cols:
+                self.num_cols.remove(self.target)
+
         # Application sur train
         X, self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat, len_col_num = traitement_train(
             data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize

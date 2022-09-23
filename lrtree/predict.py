@@ -4,7 +4,7 @@ Predict, predict_proba and precision methods for the Lrtree class
 import pandas as pd
 import numpy as np
 from copy import deepcopy
-from lrtree.discretization import bin_data_cate_test, categorie_data_bin_test
+from lrtree.discretization import bin_data_cate_test, _categorie_data_bin_test
 
 
 def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
@@ -31,9 +31,9 @@ def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
         bloc = bloc.add_prefix("par_")
         if self.data_treatment:
             treatment = self.best_treatment
-            bloc = categorie_data_bin_test(bloc.rename(columns=self.column_names), treatment[liste_cla[i]]["enc"],
-                                           treatment[liste_cla[i]]["merged_cat"],
-                                           treatment[liste_cla[i]]["discret_cat"])
+            bloc = _categorie_data_bin_test(bloc.rename(columns=self.column_names), treatment[liste_cla[i]]["enc"],
+                                            treatment[liste_cla[i]]["merged_cat"],
+                                            treatment[liste_cla[i]]["discret_cat"])
         if fun == "predict":
             bloc_pred = logreg[i].predict(bloc)
         else:

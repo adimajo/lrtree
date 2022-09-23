@@ -1,3 +1,7 @@
+import os
+import zipfile
+os.environ['LOGURU_LEVEL'] = 'INFO'
+os.environ['TQDM_DISABLE'] = '1'
 import numpy as np
 import pandas as pd
 from kaggle.api import KaggleApi
@@ -9,13 +13,13 @@ from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 
 from lrtree.discretization import Processing
-from lrtree.fit import _fit_parallelized
+from lrtree.fit import _fit_parallelized, _fit_func
 
 api = KaggleApi()
 api.authenticate()
 
 
-BASE_DIR = r"N:\Projets02\GRO_STAGES\GRO_STG_2021_09 - Logistic Regression Trees\Segmentation_scores"
+targets = {"adult": "Target", "german": "Target", "fraud": "Class"}
 
 
 def split_dataset(original: pd.DataFrame, ratio: float = 0.7) -> (pd.DataFrame, pd.DataFrame):
@@ -27,14 +31,14 @@ def split_dataset(original: pd.DataFrame, ratio: float = 0.7) -> (pd.DataFrame, 
     :return: training dataset, test dataset
     :rtype: (pandas.DataFrame, pandas.DataFrame)
     """
-    train_rows = np.random.default_rng().choice(len(original), int(ratio * len(original)), replace=False)
+    train_rows = np.random.default_rng(123).choice(len(original), int(ratio * len(original)), replace=False)
     test_rows = np.array(list(set(range(len(original))).difference(train_rows)))
     original_train = original.loc[train_rows, :]
     original_test = original.loc[test_rows, :]
     return original_train, original_test
 
 
-def get_adult_data():
+def get_adult_data(target: str):
     """
     Retrieve Adult dataset from UCI repository, transform Target to 0-1 and delete redundant information.
 
@@ -43,7 +47,7 @@ def get_adult_data():
     """
     features = ["Age", "Workclass", "fnlwgt", "Education", "Education-Num", "Martial Status",
                 "Occupation", "Relationship", "Race", "Sex", "Capital Gain", "Capital Loss",
-                "Hours per week", "Country", "Target"]
+                "Hours per week", "Country", target]
     categorical = ["Workclass", "Martial Status", "Occupation", "Relationship", "Race", "Sex", "Country"]
 
     train_url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data'
@@ -54,18 +58,18 @@ def get_adult_data():
     original_test = pd.read_csv(test_url, names=features, sep=r'\s*,\s*',
                                 engine='python', na_values="?", skiprows=1)
 
-    original_train["Target"] = original_train["Target"].replace('<=50K', '0').replace('>50K', '1').replace(
+    original_train[target] = original_train[target].replace('<=50K', '0').replace('>50K', '1').replace(
         '<=50K.', '0').replace('>50K.', '1')
-    original_train["Target"] = original_train["Target"].astype(int)
-    original_test["Target"] = original_test["Target"].replace('<=50K', '0').replace('>50K', '1').replace(
+    original_train[target] = original_train[target].astype(int)
+    original_test[target] = original_test[target].replace('<=50K', '0').replace('>50K', '1').replace(
         '<=50K.', '0').replace('>50K.', '1')
-    original_test["Target"] = original_test["Target"].astype(int)
+    original_test[target] = original_test[target].astype(int)
     del original_train["Education"]
     del original_test["Education"]
-    return original_train, original_test, original_train["Target"], original_test["Target"], categorical
+    return original_train, original_test, original_train[target], original_test[target], categorical
 
 
-def get_german_data():
+def get_german_data(target: str):
     """
     Retrieve german dataset from UCI, transform Target to 0-1.
 
@@ -74,35 +78,39 @@ def get_german_data():
     """
     features = ["Status", "Duration", "History", "Purpose", "Amount", "Savings", "Employment", "Installment",
                 "Personal", "Other", "Resident", "Property", "Age", "Plans", "Housing", "Number", "Job", "Maintenance",
-                "Telephone", "Foreign", "Target"]
+                "Telephone", "Foreign", target]
     categorical = ["Status", "History", "Purpose", "Savings", "Employment", "Installment", "Personal", "Other",
                    "Property", "Plans", "Housing", "Job", "Telephone", "Foreign"]
     url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/statlog/german/german.data'
     original = pd.read_csv(url, names=features, sep=r' ', engine='python', index_col=False)
-    original["Target"] = original["Target"] - 1
+    original[target] = original[target] - 1
     original_train, original_test = split_dataset(original)
-    return original_train, original_test, original_train["Target"].reset_index(drop=True),\
-        original_test["Target"].reset_index(drop=True), features, categorical
+    return original_train, original_test, original_train[target].reset_index(drop=True),\
+        original_test[target].reset_index(drop=True), categorical
 
 
-def get_fraud_data():
+def get_fraud_data(target: str):
     """
     Retrieve german dataset from Kaggle, delete Time info.
 
     :return: train and test sets (with labels), train and test labels, list of categorical features' names
     :rtype: (pandas.DataFrame, pandas.DataFrame, pandas.Series, pandas.Series, list)
     """
-    features = [f"V{num}" for num in range(1, 29)] + ["Amount"]
     categorical = None
-    api.dataset_download_cli("mlg-ulb/creditcardfraud", unzip=True)
+    api.dataset_download_cli("mlg-ulb/creditcardfraud", force=False)  # for some reason, unzip redownloads every time
+    effective_path = api.get_default_download_dir(
+        'datasets', "mlg-ulb", "creditcardfraud")
+    outfile = os.path.join(effective_path, "creditcardfraud.zip")
+    with zipfile.ZipFile(outfile) as z:
+        z.extractall(effective_path)
     original = pd.read_csv("creditcard.csv", engine='python')
     del original['Time']
     original_train, original_test = split_dataset(original)
-    return original_train, original_test, original_train["Target"].reset_index(drop=True),\
-        original_test["Target"].reset_index(drop=True), features, categorical
+    return original_train, original_test, original_train[target].reset_index(drop=True),\
+        original_test[target].reset_index(drop=True), categorical
 
 
-def run_benchmark(dataset: str, target: str = "Target") -> pd.DataFrame:
+def run_benchmark(dataset: str) -> pd.DataFrame:
     """
     Run a benchmark experiment of Lrtree against other models on test set.
 
@@ -112,29 +120,33 @@ def run_benchmark(dataset: str, target: str = "Target") -> pd.DataFrame:
     :rtype: pandas.DataFrame
     """
     logger.info(f"Getting {dataset} dataset and preprocessing.")
-    processing = Processing(target=target)
+    processing = Processing(target=targets[dataset])
     func_to_call = f"get_{dataset}_data"
     func_to_call = globals()[func_to_call]
-    original_train, original_test, labels_train, labels_test, categorical = func_to_call()
-    X_train = processing.fit_transform(X=original_train, categorical=categorical)
-    X_test = processing.transform(original_test)
-    model = _fit_parallelized(
+    original_train, original_test, labels_train, labels_test, categorical = func_to_call(target=targets[dataset])
+    if dataset == "fraud":
+        X_train = original_train.drop(targets[dataset], axis=1)
+        X_test = original_test.drop(targets[dataset], axis=1)
+    else:
+        X_train = processing.fit_transform(X=original_train, categorical=categorical)
+        X_test = processing.transform(original_test)
+    model = _fit_func(
         class_kwargs={
             "criterion": "gini",
             "algo": 'SEM',
-            "class_num": 10,
+            "class_num": 4,
             "max_iter": 200,
             "validation": True,
-            "data_treatment": False,
+            "data_treatment": True,
             "leaves_as_segment": True,
             "early_stopping": "changed segments"},
         fit_kwargs={
             "X": X_train,
             "y": labels_train,
-            "optimal_size": True,
-            "tree_depth": 10,
-            "tol": 1e-9},
-        nb_init=8)
+            "optimal_size": False,
+            "tree_depth": 2,
+            "tol": 1e-9,
+            "categorical": categorical})
 
     lrtree_test = 2 * roc_auc_score(labels_test, model.predict_proba(X_test)) - 1
     logger.info("Fitting Logistic Regression.")
@@ -162,6 +174,6 @@ def run_benchmark(dataset: str, target: str = "Target") -> pd.DataFrame:
 
 if __name__ == "__main__":
     results = []
-    for data in ["adult", "german", "fraud"]:
+    for data in ["german", "adult", "fraud"]:
         lrtree_test, reglog_test, tree_test, boost_test, forest_test = run_benchmark(data)
         results.append([lrtree_test, reglog_test, tree_test, boost_test, forest_test])
