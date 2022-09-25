@@ -141,7 +141,8 @@ def run_benchmark(dataset: str) -> pd.DataFrame:
             "leaves_as_segment": True,
             "early_stopping": "changed segments"},
         fit_kwargs={
-            "X": X_train,
+            "X": original_train,
+            # "X": X_train,
             "y": labels_train,
             "optimal_size": False,
             "tree_depth": 2,

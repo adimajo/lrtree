@@ -331,7 +331,7 @@ def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, d
     if X_cat is not None and X_num_transformed is not None:
         X_train = pd.concat([pd.DataFrame(X_num_transformed), X_cat], axis=1, ignore_index=True)
         labels = [*labels_num, *labels_cat]
-    elif X_cat:
+    elif X_cat is not None:
         X_train = X_cat
         labels = labels_cat
     else:

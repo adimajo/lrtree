@@ -102,21 +102,25 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
             validate_rows = idx & df.index.isin(self.validate_rows)
             y_validate = df[validate_rows]["y"].tolist()
             X_validate = df[validate_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
-            if self.data_treatment:
-                X_validate = X_validate.rename(columns=self.column_names)
-                X_validate = _categorie_data_bin_test(X_validate,
-                                                      treatment[c_iter]["enc"],
-                                                      treatment[c_iter]["merged_cat"],
-                                                      treatment[c_iter]["discret_cat"])
+            # if self.data_treatment:
+            #     X_validate = X_validate.rename(columns=self.column_names)
+            #     X_validate = _categorie_data_bin_test(
+            #         data_val=X_validate,
+            #         enc=treatment[c_iter]["enc"],
+            #         scaler=treatment[c_iter]["scaler"],
+            #         merged_cat=treatment[c_iter]["merged_cat"],
+            #         discret_cat=treatment[c_iter]["discret_cat"],
+            #         categorical=self.categorical,
+            #         discretize=self.discretize)
         else:
             train_rows = idx & df.index.isin(self.train_rows)
             y_validate = df[train_rows]["y"].tolist()
             X_validate = df[train_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
-            if self.data_treatment:
-                X_validate = _categorie_data_bin_test(X_validate.rename(columns=self.column_names),
-                                                      treatment[c_iter]["enc"],
-                                                      treatment[c_iter]["merged_cat"],
-                                                      treatment[c_iter]["discret_cat"])
+            # if self.data_treatment:
+            #     X_validate = _categorie_data_bin_test(X_validate.rename(columns=self.column_names),
+            #                                           treatment[c_iter]["enc"],
+            #                                           treatment[c_iter]["merged_cat"],
+            #                                           treatment[c_iter]["discret_cat"])
         if X_validate.shape[0] > 0:
             y_pred = model.predict_proba(X_validate)[:, 1]
             lengths_pred.append(X_validate.shape[0])
@@ -246,13 +250,14 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
             # Getting p(y | x, c_hat) and filling the probabilities
             for index, c_iter in enumerate(np.unique(df["c_hat"])):
                 idx = df["c_hat"] == c_iter
-                train_data = df[idx & df.index.isin(self.train_rows)].drop(['y', 'c_map', 'c_hat'], axis=1)
+                train_data = df[idx & df.index.isin(self.train_rows)].drop(['c_map', 'c_hat'], axis=1)
                 if train_data.shape[0] == 0:
                     logger.debug(f"No training data for c_iter {c_iter}, skipping.")
                     c_iter_to_keep[index] = False
                     continue
                 y = df[idx & df.index.isin(self.train_rows)]['y']
-                models[c_iter].fit(X=train_data, y=y)
+                models[c_iter].fit(X=train_data, y=y,
+                                   categorical=self.categorical)
                 logregs_c_hat.append(models[c_iter])
                 to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
                 predictions_log[:, c_iter] = models[c_iter].predict(to_predict)
@@ -265,10 +270,12 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                 idx = df["c_map"] == c_iter
                 train_data = df[idx & df.index.isin(self.train_rows)]
                 y = train_data['y']
-                X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
-                model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-3, warm_start=True,
-                                      discretization=self.data_treatment, column_names=self.column_names)
-                logreg = model.fit(X=X, y=y)
+                X = train_data.drop(['c_map', 'c_hat'], axis=1)
+                model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-2,
+                                      warm_start=True, data_treatment=self.data_treatment,
+                                      discretization=self.discretization,
+                                      column_names=self.column_names)
+                logreg = model.fit(X=X, y=y, categorical=self.categorical)
                 logregs_c_map.append(logreg)
                 model_c_map.append(model)
 
@@ -328,7 +335,6 @@ def _fit_em(self, df, models, i=0, stopping_criterion=False):
                 model = models[c_iter]
                 logreg = model.fit(X=X, y=y, weights=weights)
                 models[c_iter] = model
-
                 logregs_c_hat = np.append(logregs_c_hat, logreg)
                 to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
                 predictions_log[:, c_iter] = logreg.predict_proba(to_predict)[:, 1]
@@ -423,10 +429,10 @@ def _update_best(self, i, treatment, df, logregs_c_map, link):
     best_treat = {}
     if self.data_treatment:
         best_treat = {"global": treatment["global"]}
-        for c_iter in range(df["c_hat"].nunique()):
-            best_treat[c_iter] = {"enc": deepcopy(treatment[c_iter]["enc"]),
-                                  "merged_cat": deepcopy(treatment[c_iter]["merged_cat"]),
-                                  "discret_cat": deepcopy(treatment[c_iter]["discret_cat"])}
+        # for c_iter in range(df["c_hat"].nunique()):
+        #     best_treat[c_iter] = {"enc": deepcopy(treatment[c_iter]["enc"]),
+        #                           "merged_cat": deepcopy(treatment[c_iter]["merged_cat"]),
+        #                           "discret_cat": deepcopy(treatment[c_iter]["discret_cat"])}
     self.best_treatment = deepcopy(best_treat)
     self.best_logreg = logregs_c_map
     self.best_link = link
@@ -467,7 +473,8 @@ def _init_models(self):
         # If penalty ='l1', solver=self.solver or self.solver (large datasets),
         # default ’sag’, C small leads to stronger regularization
         models[c_iter] = LogRegSegment(penalty='l2', solver=self.solver, C=1e-2, tol=1e-2,
-                                       warm_start=True, discretization=self.data_treatment,
+                                       warm_start=True, data_treatment=self.data_treatment,
+                                       discretization=self.discretization,
                                        column_names=self.column_names)
 
     return models
@@ -476,9 +483,7 @@ def _init_models(self):
 def _init_fit(self, X, y):
     models = _init_models(self)
     self.criterion_iter = []
-    X_copy = np.copy(X)
-    df = pd.DataFrame(X_copy)
-    df = df.add_prefix("par_")
+    df = pd.DataFrame(deepcopy(X))
     if isinstance(X, pd.DataFrame):
         # Dictionary of the correspondence between the column names par_0... and the real names
         self.column_names = {}
@@ -488,6 +493,7 @@ def _init_fit(self, X, y):
             self.column_names[column] = or_col_names[r]
             r = r + 1
     else:
+        df = df.add_prefix("par_")
         self.column_names = {}
     df["y"] = y
 
@@ -500,6 +506,8 @@ def _init_fit(self, X, y):
         treatment["global"] = enc_global
     else:
         X_tree = df.drop(['y'], axis=1)
+    # if self.categorical:
+    #     self.categorical = ["par_" + colname for colname in self.categorical]
     return df, X_tree, models, treatment
 
 
@@ -540,15 +548,15 @@ def fit(self, X, y, solver: str = "lbfgs", nb_init: int = 1, tree_depth: int = 1
 
     if isinstance(X, pd.DataFrame):
         self.column_names = X.columns.to_list()
-    if self.data_treatment and type(X) != pd.DataFrame:
-        msg = "A numpy array cannot have mixed-type input, so using data_treatment is prohibited"
-        logger.error(msg)
-        raise ValueError(msg)
     elif self.data_treatment and not self.categorical:
         msg = "You did not provide categorical columns name, assuming only numerical columns."
         logger.info(msg)
     else:
         _check_args(X, y)
+    if self.data_treatment and type(X) != pd.DataFrame:
+        msg = "A numpy array cannot have mixed-type input, so using data_treatment is prohibited"
+        logger.error(msg)
+        raise ValueError(msg)
 
     self.n = len(y)
 

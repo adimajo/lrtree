@@ -172,6 +172,7 @@ class Lrtree:
                  class_num: int = 10,
                  max_iter: int = 100,
                  data_treatment: bool = False,
+                 discretization: bool = False,
                  leaves_as_segment: bool = False,
                  early_stopping=False,
                  burn_in: int = 30):
@@ -257,6 +258,7 @@ class Lrtree:
         self.data_treatment = data_treatment
         self.column_names = None
         self.leaves_as_segment = leaves_as_segment
+        self.discretization = discretization
 
         # Init data
         self.train_rows, self.validate_rows, self.test_rows = None, None, None
