@@ -13,13 +13,17 @@ def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
     link = self.best_link
     logreg = self.best_logreg
     # Predicted class for each sample
-    if self.data_treatment:
-        enc_global = self.best_treatment["global"]
-        classes = link.predict(bin_data_cate_test(X, enc_global))
+    if not link:
+        liste_cla = [0]
+        classes = np.zeros(len(X))
     else:
-        classes = link.predict(X)
-    # Classes that were predicted : c_map
-    liste_cla = np.unique(classes)
+        if self.data_treatment:
+            enc_global = self.best_treatment["global"]
+            classes = link.predict(bin_data_cate_test(X, enc_global))
+        else:
+            classes = link.predict(X)
+        # Classes that were predicted : c_map
+        liste_cla = np.unique(classes)
 
     X_df = pd.DataFrame(X).copy()
     X_df["class"] = classes
