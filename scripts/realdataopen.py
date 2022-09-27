@@ -180,7 +180,8 @@ def run_benchmark(X_train, X_test, labels_train: np.ndarray, labels_test: np.nda
             "leaves_as_segment": leaves_as_segment,
             "early_stopping": "changed segments"},
         fit_kwargs={
-            "X": X_train,
+            "X": original_train,
+            # "X": X_train,
             "y": labels_train,
             "optimal_size": optimal_size,
             "tree_depth": tree_depth,

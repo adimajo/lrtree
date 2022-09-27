@@ -1,8 +1,11 @@
+import inspect
+
 import numpy as np
 import sklearn as sk
 from sklearn.preprocessing import OneHotEncoder
-from lrtree.discretization import _categorie_data_bin_train
+
 from lrtree.discretization import _categorie_data_bin_test
+from lrtree.discretization import _categorie_data_bin_train
 
 
 class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
@@ -50,40 +53,63 @@ class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
 class LogRegSegment(PossiblyOneClassReg):
     def __init__(self, **kwargs):
         super().__init__()
-        self.discretization = False
         self.categories = None
-        if 'discretization' in kwargs:
+        self.data_treatment = False
+        self.discretization = False
+        self.column_names = None
+        self.categories = {}
+        if 'data_treatment' in kwargs:
+            self.data_treatment = kwargs['data_treatment']
             self.discretization = kwargs['discretization']
             self.column_names = kwargs['column_names']
             self.categories = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
+            self.scaler = None
+            self.categorical = None
 
     def fit(self, **kwargs):
-        if self.discretization:
-            train_data = kwargs['X'].rename(columns=self.column_names)
-            train_data, labels, enc, merged_cat, discret_cat = _categorie_data_bin_train(
-                train_data, var_cible="y")
+        if self.data_treatment:
+            # train_data = kwargs['X'].rename(columns=self.column_names)
+            train_data = kwargs['X']
+            train_data, labels, enc, merged_cat, discret_cat, scaler, len_col_num = _categorie_data_bin_train(
+                data=train_data,
+                var_cible="y",
+                categorical=kwargs['categorical'],
+                discretize=self.discretization
+            )
+            self.categorical = kwargs['categorical']
+            self.scaler = scaler
             self.categories["enc"] = enc
             self.categories["merged_cat"] = merged_cat
             self.categories["discret_cat"] = discret_cat
+            kwargs.pop("X")
+            super_fit_args = list(inspect.signature(super().fit).parameters)
+            kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
+            return super().fit(X=train_data, **kwargs_fit)
 
         return super().fit(**kwargs)
 
     def predict(self, X) -> np.ndarray:
-        if self.discretization:
+        if self.data_treatment:
             # Applies the data treatment for this leaf
-            X = X.rename(columns=self.column_names)
-            X = _categorie_data_bin_test(X,
-                                         self.categories["enc"],
-                                         self.categories["merged_cat"],
-                                         self.categories["discret_cat"])
+            # X = X.rename(columns=self.column_names)
+            X = _categorie_data_bin_test(data_val=X,
+                                         enc=self.categories["enc"],
+                                         scaler=self.scaler,
+                                         merged_cat=self.categories["merged_cat"],
+                                         discret_cat=self.categories["discret_cat"],
+                                         categorical=self.categorical,
+                                         discretize=self.discretization)
         return super().predict(X.to_numpy())
 
     def predict_proba(self, X) -> np.ndarray:
-        if self.discretization:
+        if self.data_treatment:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)
-            X = _categorie_data_bin_test(X,
-                                         self.categories["enc"],
-                                         self.categories["merged_cat"],
-                                         self.categories["discret_cat"])
+            X = _categorie_data_bin_test(data_val=X,
+                                         enc=self.categories["enc"],
+                                         scaler=self.scaler,
+                                         merged_cat=self.categories["merged_cat"],
+                                         discret_cat=self.categories["discret_cat"],
+                                         categorical=self.categorical,
+                                         discretize=self.discretization)
         return super().predict_proba(X.to_numpy())
