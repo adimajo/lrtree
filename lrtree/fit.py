@@ -251,7 +251,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
             # Getting p(y | x, c_hat) and filling the probabilities
             for index, c_iter in enumerate(np.unique(df["c_hat"])):
                 idx = df["c_hat"] == c_iter
-                train_data = df[idx & df.index.isin(self.train_rows)].drop(['c_map', 'c_hat'], axis=1)
+                train_data = df[idx & df.index.isin(self.train_rows)].drop(['y', 'c_map', 'c_hat'], axis=1)
                 if train_data.shape[0] == 0:
                     logger.debug(f"No training data for c_iter {c_iter}, skipping.")
                     c_iter_to_keep[index] = False
@@ -261,7 +261,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                                    categorical=self.categorical)
                 logregs_c_hat.append(models[c_iter])
                 to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
-                predictions_log[:, c_iter] = models[c_iter].predict(to_predict)
+                predictions_log[:, c_iter] = models[c_iter].predict_proba(to_predict)[:, 1]
 
             predictions_log[np.isnan(predictions_log)] = 0
 
@@ -271,7 +271,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                 idx = df["c_map"] == c_iter
                 train_data = df[idx & df.index.isin(self.train_rows)]
                 y = train_data['y']
-                X = train_data.drop(['c_map', 'c_hat'], axis=1)
+                X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
                 model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-2,
                                       warm_start=True, data_treatment=self.data_treatment,
                                       discretization=self.discretization,

@@ -86,7 +86,10 @@ class LogRegSegment(PossiblyOneClassReg):
             kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
             return super().fit(X=train_data, **kwargs_fit)
 
-        return super().fit(**kwargs)
+        else:
+            super_fit_args = list(inspect.signature(super().fit).parameters)
+            kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
+            return super().fit(**kwargs_fit)
 
     def predict(self, X) -> np.ndarray:
         if self.data_treatment:
