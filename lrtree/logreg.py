@@ -67,9 +67,8 @@ class LogRegSegment(PossiblyOneClassReg):
             self.categorical = None
 
     def fit(self, **kwargs):
+        train_data = kwargs['X']
         if self.data_treatment:
-            # train_data = kwargs['X'].rename(columns=self.column_names)
-            train_data = kwargs['X']
             train_data, labels, enc, merged_cat, discret_cat, scaler, len_col_num = _categorie_data_bin_train(
                 data=train_data,
                 var_cible="y",
@@ -81,12 +80,12 @@ class LogRegSegment(PossiblyOneClassReg):
             self.categories["enc"] = enc
             self.categories["merged_cat"] = merged_cat
             self.categories["discret_cat"] = discret_cat
-            kwargs.pop("X")
-            super_fit_args = list(inspect.signature(super().fit).parameters)
-            kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
-            return super().fit(X=train_data, **kwargs_fit)
-
-        return super().fit(**kwargs)
+        else:
+            train_data.drop(columns="y", inplace=True)
+        kwargs.pop("X")
+        super_fit_args = list(inspect.signature(super().fit).parameters)
+        kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
+        return super().fit(X=train_data, **kwargs_fit)
 
     def predict(self, X) -> np.ndarray:
         if self.data_treatment:

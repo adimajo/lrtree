@@ -14,7 +14,7 @@ from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 
 from lrtree.discretization import Processing
-from lrtree.fit import _fit_parallelized
+from lrtree.fit import _fit_parallelized, _fit_func
 
 api = KaggleApi()
 api.authenticate()
@@ -82,16 +82,13 @@ def get_adult_data(target: str, seed: int):
     original = pd.concat([original_train.reset_index(drop=True),
                           original_test.reset_index(drop=True)], axis=0).reset_index(drop=True)
 
-    original_train[target] = original_train[target].replace('<=50K', '0').replace('>50K', '1').replace(
+    original[target] = original[target].replace('<=50K', '0').replace('>50K', '1').replace(
         '<=50K.', '0').replace('>50K.', '1')
-    original_train[target] = original_train[target].astype(int)
-    original_test[target] = original_test[target].replace('<=50K', '0').replace('>50K', '1').replace(
-        '<=50K.', '0').replace('>50K.', '1')
-    original_test[target] = original_test[target].astype(int)
-    del original_train["Education"]
-    del original_test["Education"]
+    original[target] = original[target].astype(int)
+    del original["Education"]
     original_train, original_test = split_dataset(original, seed)
-    return original_train, original_test, original_train[target], original_test[target], categorical
+    return original_train.reset_index(drop=True), original_test.reset_index(drop=True),\
+        original_train[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
 def get_german_data(target: str, seed: int):
@@ -113,11 +110,12 @@ def get_german_data(target: str, seed: int):
         train=url, test=None, names=features, sep=r' ', engine='python', index_col=False)
     original[target] = original[target] - 1
     original_train, original_test = split_dataset(original, seed)
-    return original_train, original_test, original_train[target].reset_index(drop=True),\
+    return original_train.reset_index(drop=True), original_test.reset_index(drop=True),\
+        original_train[target].reset_index(drop=True),\
         original_test[target].reset_index(drop=True), categorical
 
 
-def get_fraud_data(target: str):
+def get_fraud_data(target: str, seed: int):
     """
     Retrieve german dataset from Kaggle, delete Time info.
 
@@ -135,8 +133,9 @@ def get_fraud_data(target: str):
         z.extractall(effective_path)
     original = pd.read_csv("creditcard.csv", engine='python')
     del original['Time']
-    original_train, original_test = split_dataset(original, seed)
-    return original_train, original_test, original_train[target].reset_index(drop=True),\
+    original_train, original_test = split_dataset(original, seed, ratio=0.2)
+    return original_train.reset_index(drop=True), original_test.reset_index(drop=True),\
+        original_train[target].reset_index(drop=True),\
         original_test[target].reset_index(drop=True), categorical
 
 
@@ -180,8 +179,7 @@ def run_benchmark(X_train, X_test, labels_train: np.ndarray, labels_test: np.nda
             "leaves_as_segment": leaves_as_segment,
             "early_stopping": "changed segments"},
         fit_kwargs={
-            "X": original_train,
-            # "X": X_train,
+            "X": X_train,
             "y": labels_train,
             "optimal_size": optimal_size,
             "tree_depth": tree_depth,

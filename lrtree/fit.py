@@ -236,7 +236,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
     with tqdm(total=self.max_iter, leave=False, desc="Iterations",
               disable=os.environ.get("TQDM_DISABLE", "False").lower() in ('true', '1', 't')) as pbar:
         while i < self.max_iter and not stopping_criterion:
-            logger.error(f"best: {self.best_link}")
+            # logger.error(f"best: {self.best_link}")
             logger.debug(f"Iteration {i}")
             logregs_c_hat = []
             logregs_c_map = []
@@ -289,7 +289,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
             else:
                 logger.info("The tree has only its root! Premature end of algorithm.")
                 break
-            logger.error(f"link: {link}")
+            # logger.error(f"link: {link}")
 
             # Choice of the new c_hat = random step
             tree_pred, df["c_hat"] = _draw_c_hat(link, X_tree, df, predictions_log, c_iter_to_keep)
