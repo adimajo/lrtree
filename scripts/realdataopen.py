@@ -2,19 +2,23 @@ import os
 import zipfile
 os.environ['LOGURU_LEVEL'] = 'ERROR'
 os.environ['TQDM_DISABLE'] = '1'
-import numpy as np
 import pandas as pd
 from kaggle.api import KaggleApi
 from loguru import logger
-from sklearn import linear_model
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
-
+from typing import Tuple
 from lrtree.discretization import Processing
-from lrtree.fit import _fit_parallelized, _fit_func
+from lrtree.fit import _fit_parallelized
+from operator import itemgetter
+import numpy as np
+from sklearn.linear_model import LogisticRegressionCV
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV
 
 api = KaggleApi()
 api.authenticate()
@@ -42,7 +46,8 @@ def get_from_uci(train: str, test: str = None, **kwargs) -> (pd.DataFrame, pd.Da
     return original_train, original_test
 
 
-def split_dataset(original: pd.DataFrame, seed: int, ratio: float = 0.7) -> (pd.DataFrame, pd.DataFrame):
+def split_dataset(original: pd.DataFrame, seed: int, ratio: Tuple[float, float] = (0.6, 0.2)) ->\
+        (pd.DataFrame, pd.DataFrame, pd.DataFrame):
     """
     Splits dataset into training and testing sets
 
@@ -50,13 +55,20 @@ def split_dataset(original: pd.DataFrame, seed: int, ratio: float = 0.7) -> (pd.
     :param int seed: random number generator seed
     :param float ratio: ratio of rows to keep in train dataset
     :return: training dataset, test dataset
-    :rtype: (pandas.DataFrame, pandas.DataFrame)
+    :rtype: (pandas.DataFrame, pandas.DataFrame, pandas.DataFrame)
     """
-    train_rows = np.random.default_rng(seed).choice(len(original), int(ratio * len(original)), replace=False)
-    test_rows = np.array(list(set(range(len(original))).difference(train_rows)))
+    train_rows = np.random.default_rng(seed).choice(len(original), int(ratio[0] * len(original)), replace=False)
+    # train_rows.sort()
+    left_rows = np.array(list(set(range(len(original))).difference(train_rows)))
+    # left_rows.sort()
+    validation_rows = np.random.default_rng(seed).choice(len(left_rows), int(ratio[1] * len(original)), replace=False)
+    # validation_rows.sort()
+    validation_rows = left_rows[validation_rows]
+    test_rows = np.array(list(set(left_rows).difference(validation_rows)))
     original_train = original.loc[train_rows, :]
+    original_val = original.loc[validation_rows, :]
     original_test = original.loc[test_rows, :]
-    return original_train, original_test
+    return original_train, original_val, original_test
 
 
 def get_adult_data(target: str, seed: int):
@@ -86,9 +98,10 @@ def get_adult_data(target: str, seed: int):
         '<=50K.', '0').replace('>50K.', '1')
     original[target] = original[target].astype(int)
     del original["Education"]
-    original_train, original_test = split_dataset(original, seed)
-    return original_train.reset_index(drop=True), original_test.reset_index(drop=True),\
-        original_train[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
+    original_train, original_val, original_test = split_dataset(original, seed)
+    return original_train.reset_index(drop=True), original_val.reset_index(drop=True),\
+        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True),\
+        original_val[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
 def get_german_data(target: str, seed: int):
@@ -109,10 +122,10 @@ def get_german_data(target: str, seed: int):
     original, _ = get_from_uci(
         train=url, test=None, names=features, sep=r' ', engine='python', index_col=False)
     original[target] = original[target] - 1
-    original_train, original_test = split_dataset(original, seed)
-    return original_train.reset_index(drop=True), original_test.reset_index(drop=True),\
-        original_train[target].reset_index(drop=True),\
-        original_test[target].reset_index(drop=True), categorical
+    original_train, original_val, original_test = split_dataset(original, seed)
+    return original_train.reset_index(drop=True), original_val.reset_index(drop=True),\
+        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True),\
+        original_val[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
 def get_fraud_data(target: str, seed: int):
@@ -133,10 +146,10 @@ def get_fraud_data(target: str, seed: int):
         z.extractall(effective_path)
     original = pd.read_csv("creditcard.csv", engine='python')
     del original['Time']
-    original_train, original_test = split_dataset(original, seed, ratio=0.2)
-    return original_train.reset_index(drop=True), original_test.reset_index(drop=True),\
-        original_train[target].reset_index(drop=True),\
-        original_test[target].reset_index(drop=True), categorical
+    original_train, original_val, original_test = split_dataset(original, seed)
+    return original_train.reset_index(drop=True), original_val.reset_index(drop=True),\
+        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True),\
+        original_val[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
 def get_data(dataset: str, seed: int = 0):
@@ -144,28 +157,28 @@ def get_data(dataset: str, seed: int = 0):
     processing = Processing(target=targets[dataset])
     func_to_call = f"get_{dataset}_data"
     func_to_call = globals()[func_to_call]
-    original_train, original_test, labels_train, labels_test, categorical = func_to_call(target=targets[dataset],
-                                                                                         seed=seed)
+    original_train, original_val, original_test, labels_train, labels_val, labels_test, categorical = func_to_call(
+        target=targets[dataset], seed=seed)
     if dataset == "fraud":
         X_train = original_train.drop(targets[dataset], axis=1)
+        X_val = original_val.drop(targets[dataset], axis=1)
         X_test = original_test.drop(targets[dataset], axis=1)
     else:
         X_train = processing.fit_transform(X=original_train, categorical=categorical)
+        X_val = processing.transform(original_val)
         X_test = processing.transform(original_test)
-    return X_train, X_test, labels_train, labels_test, categorical
+    return X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
 
 
-def run_benchmark(X_train, X_test, labels_train: np.ndarray, labels_test: np.ndarray,
+def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: np.ndarray, labels_test: np.ndarray,
                   categorical: list, class_num: int = 5, data_treatment: bool = False,
                   leaves_as_segment: bool = False, optimal_size: bool = False,
-                  tree_depth: int = 2) -> float:
+                  tree_depth: int = 2) -> Tuple[float, float]:
     """
     Run a benchmark experiment of Lrtree against other models on test set.
 
-    :param str dataset: name of the dataset (one of 'adult', 'german', 'fraud')
-    :param int seed: random number generator seed
     :return: Performance of Lrtree, LogisticRegression, DecitionTree, XGboost and RandomForest on test set
-    :rtype: pandas.DataFrame
+    :rtype: (float, float)
     """
     model = _fit_parallelized(
         nb_init=8,
@@ -186,29 +199,113 @@ def run_benchmark(X_train, X_test, labels_train: np.ndarray, labels_test: np.nda
             "tol": 1e-9,
             "categorical": categorical})
 
-    return 2 * roc_auc_score(labels_test, model.predict_proba(X_test)) - 1
+    return roc_auc_score(labels_val, model.predict_proba(X_val)),\
+        roc_auc_score(labels_test, model.predict_proba(X_test))
 
 
-def run_other_models(X_train, X_test, labels_train, labels_test):
+def run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical):
+    for class_num in range(2, 10):
+        for data_treatment in [True, False]:
+            for leaves_as_segment in [True, False]:
+                for optimal_size in [True, False]:
+                    for tree_depth in range(2, 10):
+                        lrtree_test = run_benchmark(
+                            X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical,
+                            class_num, data_treatment, leaves_as_segment, optimal_size,
+                            tree_depth)
+                        results_lrtree.append(lrtree_test)
+    return max(results_lrtree, key=itemgetter(0))[1]
+
+
+def run_logreg(X_cv, labels_cv, X_test, labels_test):
     logger.info("Fitting Logistic Regression.")
-    modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', max_iter=100)
-    modele_regLog.fit(X_train, labels_train)
-    reglog_test = 2 * roc_auc_score(labels_test, modele_regLog.predict_proba(X_test)[:, 1]) - 1
+    alphas = np.logspace(-2, 0, num=21)
+    l1_ratios = np.linspace(0, 1, 11)
+    pipeline = make_pipeline(StandardScaler(), LogisticRegressionCV(
+        Cs=alphas, cv=10, penalty='elasticnet', scoring="roc_auc", solver="saga", n_jobs=-1, l1_ratios=l1_ratios))
+    pipeline.fit(X_cv, labels_cv)
+    return roc_auc_score(labels_test, pipeline.predict_proba(X_test)[:, 1])
 
+
+def run_tree(X_train, X_val, X_test, labels_train, labels_val, labels_test):
     logger.info("Fitting Decision Tree")
-    model_tree = DecisionTreeClassifier(min_samples_leaf=500, random_state=0)
-    model_tree.fit(X_train, labels_train)
-    tree_test = 2 * roc_auc_score(labels_test, model_tree.predict_proba(X_test)[:, 1]) - 1
+    best_tree = None
+    model_tree = DecisionTreeClassifier(random_state=0)
+    path = model_tree.cost_complexity_pruning_path(X_train, labels_train)
+    alphas = path.ccp_alphas
 
+    # Tree propositions, with more or less pruning
+    best_score = 0
+    # Starts from the most complete tree, pruning while it improves the accuracy on the
+    # validation test
+    for a in range(len(alphas)):
+        alpha = alphas[a]
+        tree = DecisionTreeClassifier(ccp_alpha=alpha)
+        model_tree.fit(X_train, labels_train)
+        score = tree.score(X_val, labels_val)
+        # Choosing the tree with the best accuracy on the validation set
+        if score > best_score:
+            best_tree = tree
+
+    return roc_auc_score(labels_test, best_tree.predict_proba(X_test)[:, 1])
+
+
+def run_gradientboosting(X_cv, labels_cv, X_test, labels_test):
     logger.info("Fitting Gradient Boosting")
-    model_boost = GradientBoostingClassifier(min_samples_leaf=100, random_state=0)
-    model_boost.fit(X_train, labels_train)
-    boost_test = 2 * roc_auc_score(labels_test, model_boost.predict_proba(X_test)[:, 1]) - 1
 
+    param_grid = {
+        'learning_rate': [0.01, 0.1, 0.5, 2.0],
+        'n_estimators': [100, 200, 300, 1000],
+        'subsample': [0.2, 0.5, 0.75, 1.0],
+        'min_samples_split': [2, 10, 30],
+        'min_samples_leaf': [1, 5, 20],
+        'max_depth': [2, 3, 5, 10],
+        'max_features': ['log2', 'sqrt', None, 0.5]
+    }
+
+    model_boost = GradientBoostingClassifier()
+    grid_search = GridSearchCV(estimator=model_boost,
+                               param_grid=param_grid,
+                               cv=10,
+                               n_jobs=-1,
+                               verbose=2)
+    grid_search.fit(X_cv, labels_cv)
+    return roc_auc_score(labels_test, grid_search.predict_proba(X_test)[:, 1])
+
+
+def run_randomforest(X_cv, labels_cv, X_test, labels_test):
     logger.info("Fitting Random forest")
-    model_forest = RandomForestClassifier(n_estimators=500, min_samples_leaf=100, random_state=0)
-    model_forest.fit(X_train, labels_train)
-    forest_test = 2 * roc_auc_score(labels_test, model_forest.predict_proba(X_test)[:, 1]) - 1
+
+    param_grid = {
+        'n_estimators': [10, 50, 100, 1000],
+        'min_samples_split': [2, 10, 30],
+        'min_samples_leaf': [1, 5, 20],
+        'max_depth': [None, 2, 5, 10],
+        'max_features': ['log2', 'sqrt', None, 0.5],
+        'ccp_alpha': [0.0, 0.1, 1.0, 10.0]
+    }
+
+    model_boost = RandomForestClassifier()
+    grid_search = GridSearchCV(estimator=model_boost,
+                               param_grid=param_grid,
+                               cv=10,
+                               n_jobs=-1,
+                               verbose=2)
+    grid_search.fit(X_cv, labels_cv)
+    return roc_auc_score(labels_test, grid_search.predict_proba(X_test)[:, 1])
+
+
+def run_other_models(X_train, X_val, X_test, labels_train, labels_val, labels_test):
+    # CV is train + val
+    X_cv = pd.concat([X_train, X_val]).reset_index(drop=True)
+    labels_cv = pd.concat([labels_train, labels_val]).reset_index(drop=True)
+
+    # Reglog, decision tree, boosting, random forest
+    reglog_test = run_logreg(X_cv, labels_cv, X_test, labels_test)
+    tree_test = run_tree(X_train, X_val, X_test, labels_train, labels_val, labels_test)
+    boost_test = run_gradientboosting(X_cv, labels_cv, X_test, labels_test)
+    forest_test = run_randomforest(X_cv, labels_cv, X_test, labels_test)
+
     return reglog_test, tree_test, boost_test, forest_test
 
 
@@ -218,21 +315,10 @@ if __name__ == "__main__":
         results_exp = []
         for seed in tqdm(range(0, 600, 30), desc="Seeds"):
             results_lrtree = []
-            X_train, X_test, labels_train, labels_test, categorical = get_data(data, seed)
+            X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical = get_data(data, seed)
+            lrtree_test = run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical)
             reglog_test, tree_test, boost_test, forest_test = run_other_models(
-                X_train, X_test, labels_train, labels_test)
-            for class_num in range(2, 10):
-                for data_treatment in [False]:
-                    for leaves_as_segment in [True, False]:
-                        for optimal_size in [True, False]:
-                            for tree_depth in range(2, 10):
-                                lrtree_test = run_benchmark(
-                                    X_train, X_test, labels_train, labels_test, categorical,
-                                    class_num, data_treatment, leaves_as_segment, optimal_size,
-                                    tree_depth
-                                )
-                                results_lrtree.append(lrtree_test)
-            lrtree_test = max(results_lrtree)
+                X_train, X_val, X_test, labels_train, labels_train, labels_test)
             results_exp.append([lrtree_test, reglog_test, tree_test, boost_test, forest_test])
         results_df.append(pd.DataFrame(results_exp, columns=["[MODEL]", "Logistic regression", "Decision tree",
                                                              "Boosting", "Random Forest"]).agg(["mean", "std"]))
