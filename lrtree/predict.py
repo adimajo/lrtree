@@ -31,10 +31,8 @@ def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
 
     X_df["class"] = classes
     X_df["pred"] = 0
-    print(X_df)
     for i in range(len(liste_cla)):
         filtre = X_df["class"] == liste_cla[i]
-        print(filtre)
         bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
         if self.data_treatment:
             treatment = self.best_treatment

@@ -81,7 +81,10 @@ class LogRegSegment(PossiblyOneClassReg):
             self.categories["merged_cat"] = merged_cat
             self.categories["discret_cat"] = discret_cat
         else:
-            train_data.drop(columns="y", inplace=True)
+            try:
+                train_data.drop(columns="y", inplace=True)
+            except KeyError:
+                pass
         kwargs.pop("X")
         super_fit_args = list(inspect.signature(super().fit).parameters)
         kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}

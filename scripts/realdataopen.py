@@ -2,6 +2,8 @@ import os
 import zipfile
 os.environ['LOGURU_LEVEL'] = 'ERROR'
 os.environ['TQDM_DISABLE'] = '1'
+import warnings
+warnings.filterwarnings("ignore")
 import pandas as pd
 from kaggle.api import KaggleApi
 from loguru import logger
@@ -204,11 +206,11 @@ def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: 
 
 
 def run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical):
-    for class_num in range(2, 10):
-        for data_treatment in [True, False]:
-            for leaves_as_segment in [True, False]:
-                for optimal_size in [True, False]:
-                    for tree_depth in range(2, 10):
+    for class_num in range(5, 6):
+        for data_treatment in [False]:
+            for leaves_as_segment in [True]:
+                for optimal_size in [True]:
+                    for tree_depth in range(3, 5):
                         lrtree_test = run_benchmark(
                             X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical,
                             class_num, data_treatment, leaves_as_segment, optimal_size,
@@ -241,10 +243,11 @@ def run_tree(X_train, X_val, X_test, labels_train, labels_val, labels_test):
     for a in range(len(alphas)):
         alpha = alphas[a]
         tree = DecisionTreeClassifier(ccp_alpha=alpha)
-        model_tree.fit(X_train, labels_train)
+        tree.fit(X_train, labels_train)
         score = tree.score(X_val, labels_val)
         # Choosing the tree with the best accuracy on the validation set
         if score > best_score:
+            best_score = score
             best_tree = tree
 
     return roc_auc_score(labels_test, best_tree.predict_proba(X_test)[:, 1])
@@ -255,12 +258,12 @@ def run_gradientboosting(X_cv, labels_cv, X_test, labels_test):
 
     param_grid = {
         'learning_rate': [0.01, 0.1, 0.5, 2.0],
-        'n_estimators': [100, 200, 300, 1000],
-        'subsample': [0.2, 0.5, 0.75, 1.0],
-        'min_samples_split': [2, 10, 30],
+        'n_estimators': [100, 300, 1000],
+        'subsample': [0.5, 0.75, 1.0],
+        'min_samples_split': [10, 30],
         'min_samples_leaf': [1, 5, 20],
-        'max_depth': [2, 3, 5, 10],
-        'max_features': ['log2', 'sqrt', None, 0.5]
+        'max_depth': [2, 5, 10],
+        'max_features': ['log2', 'sqrt', None]
     }
 
     model_boost = GradientBoostingClassifier()
@@ -277,18 +280,18 @@ def run_randomforest(X_cv, labels_cv, X_test, labels_test):
     logger.info("Fitting Random forest")
 
     param_grid = {
-        'n_estimators': [10, 50, 100, 1000],
+        'n_estimators': [10, 100, 1000],
         'min_samples_split': [2, 10, 30],
-        'min_samples_leaf': [1, 5, 20],
-        'max_depth': [None, 2, 5, 10],
-        'max_features': ['log2', 'sqrt', None, 0.5],
-        'ccp_alpha': [0.0, 0.1, 1.0, 10.0]
+        'min_samples_leaf': [5, 20],
+        'max_depth': [None, 2, 5],
+        'max_features': ['log2', 'sqrt', None],
+        'ccp_alpha': [0.0, 0.1, 1.0]
     }
 
     model_boost = RandomForestClassifier()
     grid_search = GridSearchCV(estimator=model_boost,
                                param_grid=param_grid,
-                               cv=10,
+                               cv=5,
                                n_jobs=-1,
                                verbose=2)
     grid_search.fit(X_cv, labels_cv)
@@ -311,14 +314,14 @@ def run_other_models(X_train, X_val, X_test, labels_train, labels_val, labels_te
 
 if __name__ == "__main__":
     results_df = []
-    for data in ["german", "adult", "fraud"]:
+    for data in ["german"]:
         results_exp = []
         for seed in tqdm(range(0, 600, 30), desc="Seeds"):
             results_lrtree = []
             X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical = get_data(data, seed)
             lrtree_test = run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical)
             reglog_test, tree_test, boost_test, forest_test = run_other_models(
-                X_train, X_val, X_test, labels_train, labels_train, labels_test)
+                X_train, X_val, X_test, labels_train, labels_val, labels_test)
             results_exp.append([lrtree_test, reglog_test, tree_test, boost_test, forest_test])
         results_df.append(pd.DataFrame(results_exp, columns=["[MODEL]", "Logistic regression", "Decision tree",
                                                              "Boosting", "Random Forest"]).agg(["mean", "std"]))
