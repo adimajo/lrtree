@@ -36,7 +36,7 @@ variables:
     - git config --global user.name "$GITLAB_USER_NAME"
     - git config --global user.email "$GITLAB_USER_EMAIL"
 
-.global_cache: &global_cache:
+.global_cache: &global_cache
   cache:
     paths:
       - .cache/pip
@@ -44,7 +44,7 @@ variables:
       - .cache/venvs
     policy: pull-push
 
-.pull_cache: &pull_cache:
+.pull_cache: &pull_cache
   cache:
     paths:
       - .cache/pip
@@ -69,10 +69,9 @@ lint:
   <<: *common_tag
   <<: *common_python
   script:
-    - cd lrtree
     - pip install flake8
-    - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    - flake8 . --count --max-complexity=15 --max-line-length=120 --statistics
+    - flake8 lrtree --count --select=E9,F63,F7,F82 --show-source --statistics
+    - flake8 --ignore=W504 lrtree --count --max-complexity=15 --max-line-length=120 --statistics
   only:
     refs:
       - branches
@@ -93,6 +92,7 @@ install:
   script:
     - pip install pipenv
     - pipenv install
+    - pipenv run python -c 'import lrtree; print(lrtree.__version__)'  # otherwise next line doesn't error
     - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'` >> build.env
   only:
     - master
@@ -141,10 +141,13 @@ quality_check:
     SONAR_SCANNER_OPTS: "-Djavax.net.ssl.trustStore=cacerts"
   script:
     - . ./build.env
-    - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
-    - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
     - apk --update add java-common
-    - keytool -import -alias mycert -file cacreditagricoleserver.crt -storetype jks -trustcacerts -noprompt -keypass keypass -keystore cacerts -storepass test@123
+    - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then wget -qO - ${PKI}/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then wget -qO - ${PKI}/rca_credit_agricole_group.crt >> rca_credit_agricole_group.crt
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then cat cacreditagricoleserver.crt rca_credit_agricole_group.crt > credit_agricole_bundle.crt
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then keytool -import -alias mycert -file cacreditagricoleserver.crt -storetype jks -trustcacerts -noprompt -keypass keypass -keystore cacerts -storepass test@123 ; fi
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then export SONAR_SCANNER_OPTS="-Djavax.net.ssl.trustStore=cacerts" ; fi
     - sonar-scanner -Dsonar.exclusions=tests/**,coverage.xml,setup.py,docs/** -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.qualitygate.wait=true -Dsonar.projectKey=$SONAR_KEY -Dsonar.projectVersion=$APPLICATION_TAG_VERSION
   only:
    - master
@@ -205,11 +208,12 @@ deploy:
     - pipenv run pipenv_to_requirements
     - pipenv run python3 setup.py sdist bdist_wheel
     - python3 setup.py sdist bdist_wheel
-    - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
-    - export CURL_CA_BUNDLE=""
+    - wget -qO - ${PKI}/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
+    - wget -qO - ${PKI}/rca_credit_agricole_group.crt >> rca_credit_agricole_group.crt
+    - cat cacreditagricoleserver.crt rca_credit_agricole_group.crt > credit_agricole_bundle.crt
     - 'echo TARGET REPOSITORY : ${ARTI_PYPI_SCRATCH_REGISTRY}'
     - echo ${ARTI_PYPI_SCRATCH_REGISTRY} >> .pypirc
-    - pipenv run twine upload --cert cacreditagricoleserver.crt --config-file .pypirc --repository arti dist/*
+    - pipenv run twine upload --cert credit_agricole_bundle.crt --config-file .pypirc --repository arti dist/*
   only:
    - master
 

@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 import lrtree
 from lrtree import LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS
-from lrtree.discretization import _categorie_data_bin_train, _categorie_data_bin_test, bin_data_cate_train, bin_data_cate_test
+from lrtree.discretization import bin_data_cate_train
 from lrtree.logreg import LogRegSegment
 
 warnings.filterwarnings("ignore", category=UserWarning)

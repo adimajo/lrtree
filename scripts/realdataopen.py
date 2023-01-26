@@ -22,8 +22,10 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
 
-api = KaggleApi()
-api.authenticate()
+
+if False:
+    api = KaggleApi()
+    api.authenticate()
 
 
 targets = {"adult": "Target", "german": "Target", "fraud": "Class"}

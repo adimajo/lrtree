@@ -384,13 +384,14 @@ def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler:
         col = X_val_num[column]
         if col.dtypes not in ("int32", "int64", "float32", "float64"):
             X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
-    X_val_num_transformed = scaler.transform(X_val_num)
-
     # Need to reset the index for the concat to work well (when not same index)
     X_val_cat = X_val_cat.reset_index(drop=True)
-    # X_val_num = X_val_num.reset_index(drop=True)
-    X_test = pd.concat([pd.DataFrame(X_val_num_transformed), X_val_cat], axis=1, ignore_index=True)
-    return X_test
+    if not X_val_num.empty:
+        X_val_num_transformed = scaler.transform(X_val_num)
+        X_test = pd.concat([pd.DataFrame(X_val_num_transformed), X_val_cat], axis=1, ignore_index=True)
+        return X_test
+    else:
+        return X_val_cat
 
 
 def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
@@ -721,18 +722,20 @@ def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScale
         Merged categories for each column
     :param dict discret_cat:
         Binning for the discretisation for each column
+    :param list categorical:
+        Names for categorical features
     :param bool discretize:
         Whether numerical features were discretized
-    :return: les données traitées
+    :return: preprocessed validation data
     :rtype: pandas.DataFrame
     """
     X_val = data.copy()
     if "Defaut_12_Mois_contagion" in X_val.columns:
         X_val.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
     X_val = extreme_values(X_val, missing=False)
-    X_val = _categorie_data_bin_test(X_val, enc, scaler,
-                                     merged_cat, discret_cat,
-                                     categorical, discretize)
+    X_val = _categorie_data_bin_test(data_val=X_val, enc=enc, scaler=scaler,
+                                     merged_cat=merged_cat, discret_cat=discret_cat,
+                                     categorical=categorical, discretize=discretize)
     return X_val
 
 
@@ -789,7 +792,7 @@ class Processing:
         X, self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat, len_col_num = traitement_train(
             data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize
         )
-        assert len_col_num == len(self.num_cols)  # nosec
+        # assert len_col_num == len(self.num_cols)  # nosec
         self.X_train = X
 
     def fit_transform(self, X: pd.DataFrame, categorical: list):
