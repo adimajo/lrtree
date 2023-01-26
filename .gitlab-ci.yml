@@ -107,6 +107,7 @@ test:
   <<: *common_tag
   <<: *common_python
   script:
+    - apt-get update
     - apt-get install libxml2-dev
     - pip install pipenv
     - pipenv install -d --skip-lock
