@@ -17,7 +17,7 @@ twine = "*"
 pipenv_to_requirements = "*"
 vertica-python = "*"
 verticapy = "*"
-kaggle-cli = "*"
+kaggle = "*"
 pyinstrument = "*"
 
 [packages]
