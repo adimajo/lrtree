@@ -28,14 +28,15 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-dep libxml2-dev libxmlsec1-dev libxslt-dev python3-lxml libgcrypt20-doc gnutls-bin gnutls-doc python3-genshi python3-lxml-dbg python-lxml-doc
+        sudo apt-get install -y libxml2-dev libxmlsec1-dev libxslt-dev python3-lxml libgcrypt20-doc gnutls-bin gnutls-doc python3-genshi python3-lxml-dbg python-lxml-doc
         python -m pip install --upgrade pip
         pip install pipenv Cython
-        pipenv install --dev --skip-lock
+        pipenv install --skip-lock
         export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'`
         echo "APPLICATION_TAG_VERSION=$APPLICATION_TAG_VERSION" >> $GITHUB_ENV
     - name: Lint with flake8
       run: |
+        pipenv install --dev --skip-lock
         pipenv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=tests/conftest.py
         pipenv run flake8 --ignore=W504 . --count --max-complexity=15 --max-line-length=120 --statistics --exclude=tests/conftest.py
     - name: Test with coverage and pytest

@@ -108,7 +108,7 @@ test:
   <<: *common_python
   script:
     - apt-get update
-    - apt-get install -y python3-lxml build-dep libxml2-dev libxslt-dev
+    - apt-get install -y python3-lxml libxml2-dev libxslt-dev
     - pip install pipenv Cython
     - pipenv install -d --skip-lock
     - pipenv run coverage run --source lrtree/ -m pytest
