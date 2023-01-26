@@ -107,6 +107,7 @@ test:
   <<: *common_tag
   <<: *common_python
   script:
+    - sudo apt-get install libxml2-dev
     - pip install pipenv
     - pipenv install -d --skip-lock
     - pipenv run coverage run --source lrtree/ -m pytest
