@@ -376,8 +376,10 @@ def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler:
                 X_val.loc[:, column] = X_val[column].astype(np.float64)
                 X_val = apply_discretization(X_val, column, discret_cat[column])
 
-    X_val_cat = enc.transform(X_val[to_change])
-    X_val_cat = pd.DataFrame(X_val_cat)
+    if to_change:
+        assert set(enc.feature_names_in_) == set(to_change)
+        X_val_cat = enc.transform(X_val[enc.feature_names_in_])
+        X_val_cat = pd.DataFrame(X_val_cat)
 
     X_val_num = X_val.drop(to_change, axis=1)
     for column in X_val_num.columns:
