@@ -191,7 +191,7 @@ deploy:
     - wget -qO - ${PKI}/rca_credit_agricole_group.crt >> rca_credit_agricole_group.crt
     - cat cacreditagricoleserver.crt rca_credit_agricole_group.crt > credit_agricole_bundle.crt
     - 'echo TARGET REPOSITORY : ${ARTI_PYPI_SCRATCH_REGISTRY}'
-    - echo ${ARTI_PYPI_SCRATCH_REGISTRY} >> .pypirc
+    - echo "${ARTI_REGISTRY}/artifactory/api/pypi/${ARTI_PYPI_SCRATCH_REGISTRY}" >> .pypirc
     - pipenv run twine upload --cert credit_agricole_bundle.crt --config-file .pypirc --repository arti dist/*
   only:
    - master
