@@ -1,12 +1,14 @@
 """
 generate_data module for the Lrtree class: generating some data to test the algorithm on.
 """
+from typing import Tuple
+
 import numpy as np
 
 
 @staticmethod
 def generate_data(n: int, d: int, seed=None, theta: np.ndarray = None) ->\
-        tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """
     Generates some toy continuous data that gets discretized, and a label
     is drawn from a logistic regression given the discretized features.
