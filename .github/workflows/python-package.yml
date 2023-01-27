@@ -30,6 +30,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install "pipenv<=2022.10.4"
         pipenv install -d
+        pipenv --version
         export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'`
         echo "APPLICATION_TAG_VERSION=$APPLICATION_TAG_VERSION" >> $GITHUB_ENV
     - name: Lint with flake8
@@ -69,7 +70,7 @@ jobs:
         git checkout master
     - name: Build and check package
       run: |
-        pipenv run pip install pipenv_to_requirements twine
+        pipenv --version
         pipenv run pipenv_to_requirements
         pipenv run pip install --upgrade keyring keyrings.alt
         pipenv run python setup.py sdist bdist_wheel
