@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>lrtree.discretization &mdash; lrtree 1.0.4 documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/jquery.js"></script>
+        <script src="../../_static/underscore.js"></script>
+        <script src="../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../../index.html" class="icon icon-home"> lrtree
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../_autosummary/lrtree.html">lrtree</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">lrtree</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+          <li class="breadcrumb-item"><a href="../lrtree.html">lrtree</a></li>
+      <li class="breadcrumb-item active">lrtree.discretization</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for lrtree.discretization</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">implements data preprocessing (merging and discretization)</span>
+
+<span class="sd">.. autoclass:: Processing</span>
+<span class="sd">   :members:</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="kn">import</span> <span class="nn">itertools</span>
+<span class="kn">from</span> <span class="nn">bisect</span> <span class="kn">import</span> <span class="n">bisect_right</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">log</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">from</span> <span class="nn">loguru</span> <span class="kn">import</span> <span class="n">logger</span>
+<span class="kn">from</span> <span class="nn">pandas.core.common</span> <span class="kn">import</span> <span class="n">flatten</span>
+<span class="kn">from</span> <span class="nn">scipy.stats</span> <span class="kn">import</span> <span class="n">chi2_contingency</span>
+<span class="kn">from</span> <span class="nn">sklearn</span> <span class="kn">import</span> <span class="n">metrics</span>
+<span class="kn">from</span> <span class="nn">sklearn.preprocessing</span> <span class="kn">import</span> <span class="n">LabelEncoder</span>
+<span class="kn">from</span> <span class="nn">sklearn.preprocessing</span> <span class="kn">import</span> <span class="n">OneHotEncoder</span>
+<span class="kn">from</span> <span class="nn">sklearn.preprocessing</span> <span class="kn">import</span> <span class="n">StandardScaler</span>
+
+<span class="n">FORMAT</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="si">{:.2e}</span><span class="s2">&quot;</span>
+
+
+<span class="k">def</span> <span class="nf">bin_data_cate_train</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">var_cible</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">categorical</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="c1"># if categorical is None:</span>
+    <span class="c1">#     categorical = [&quot;Categ_NAF_Pro_Agri&quot;, &quot;CRED_Null_Regroup_CATEG_REV&quot;, &quot;CRED_Null_Regroup_CATEG_CONSO&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Regroup_CATEG_HAB&quot;, &quot;CRED_Null_Regroup_CATEG_PRET&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_Dest_fin_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_Dest_fin_Hab&quot;, &quot;CRED_Null_Group_Dest_fin_tiers&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_bien_fin_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_bien_fin_Hab&quot;, &quot;CRED_Null_Group_bien_fin_tiers&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_interv_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_interv_Hab&quot;, &quot;CRED_Null_Group_interv_tiers&quot;, &quot;regroup_categ_juridique&quot;,</span>
+    <span class="c1">#                    &quot;Regroup_CSP_Initiale&quot;, &quot;REGIME_MATRIMONIAL&quot;, &quot;CAPACITE_JURIDIQUE&quot;, &quot;Type_Option&quot;,</span>
+    <span class="c1">#                    &quot;TOP_SEUIL_New_def&quot;, &quot;segment&quot;, &quot;incident&quot;]</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">to_change</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">categorical</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">categorical</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+                <span class="n">X</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">categorical</span> <span class="ow">and</span> <span class="n">column</span> <span class="o">!=</span> <span class="n">var_cible</span><span class="p">:</span>
+            <span class="n">X</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">var_cible</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">X</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="n">var_cible</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">enc</span> <span class="o">=</span> <span class="n">OneHotEncoder</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">handle_unknown</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">to_change</span><span class="p">])</span>
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_cat</span><span class="p">)</span>
+    <span class="n">X_num</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">col</span> <span class="o">=</span> <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">col</span><span class="o">.</span><span class="n">dtypes</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="s2">&quot;int64&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">,</span> <span class="s2">&quot;float64&quot;</span><span class="p">):</span>
+                <span class="n">X_num</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+    <span class="c1"># Need to reset the index for the concat to work well</span>
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="n">X_cat</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_num</span> <span class="o">=</span> <span class="n">X_num</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">X_train</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">X_num</span><span class="p">,</span> <span class="n">X_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">enc</span>
+
+
+<span class="k">def</span> <span class="nf">chi2_test</span><span class="p">(</span><span class="n">liste</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">chi2_contingency</span><span class="p">(</span><span class="n">liste</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="c1"># Happens when one modality of the variable has only 0 or only 1</span>
+        <span class="k">return</span> <span class="mi">1</span>
+
+
+<span class="k">def</span> <span class="nf">grouping</span><span class="p">(</span><span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">var</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">var_predite</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">seuil</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Chi2 independence algorithm to group modalities</span>
+
+<span class="sd">    :param pandas.Dataframe X:</span>
+<span class="sd">        Data with some variables being categorical</span>
+<span class="sd">    :param str var:</span>
+<span class="sd">        Column for which we apply the algorithm</span>
+<span class="sd">    :param str var:</span>
+<span class="sd">        Column we aim to predict</span>
+<span class="sd">    :param str var_predite:</span>
+<span class="sd">        Column we aim to predict</span>
+<span class="sd">    :param float seuil:</span>
+<span class="sd">        Value for the p-value over which we merge modalities</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X_grouped</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># Necessary to be able to compare (and unique) categories</span>
+    <span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="n">initial_categories</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">])</span>
+
+    <span class="n">p_value</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="c1"># We want a minimum of two categories, otherwise the variable becomes useless</span>
+    <span class="k">while</span> <span class="n">p_value</span> <span class="o">&gt;</span> <span class="n">seuil</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">]))</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="c1"># Counts the number of 0/1 by modality</span>
+        <span class="n">freq_table</span> <span class="o">=</span> <span class="n">X_grouped</span><span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="n">var</span><span class="p">,</span> <span class="n">var_predite</span><span class="p">])</span><span class="o">.</span><span class="n">size</span><span class="p">()</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+        <span class="c1"># All the combinations of values</span>
+        <span class="n">liste_paires_modalities</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">]),</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="c1"># Chi2 between the pairs</span>
+        <span class="n">liste_chi2</span> <span class="o">=</span> <span class="p">[</span><span class="n">chi2_test</span><span class="p">([</span><span class="n">freq_table</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">in1d</span><span class="p">(</span><span class="n">freq_table</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="n">pair</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="mi">2</span><span class="p">],</span>
+                                 <span class="n">freq_table</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">in1d</span><span class="p">(</span><span class="n">freq_table</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="n">pair</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="mi">2</span><span class="p">]])</span> <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span>
+                      <span class="n">liste_paires_modalities</span><span class="p">]</span>
+        <span class="n">p_value</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">liste_chi2</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">p_value</span> <span class="o">&gt;</span> <span class="n">seuil</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">]))</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># Updates the modality to the new concatenated value</span>
+            <span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">in1d</span><span class="p">(</span><span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="n">liste_paires_modalities</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">liste_chi2</span><span class="p">,</span> <span class="n">p_value</span><span class="p">))])]</span> <span class="o">=</span> \
+                <span class="n">liste_paires_modalities</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">liste_chi2</span><span class="p">,</span> <span class="n">p_value</span><span class="p">))][</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39; - &#39;</span> <span class="o">+</span> \
+                <span class="n">liste_paires_modalities</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">liste_chi2</span><span class="p">,</span> <span class="n">p_value</span><span class="p">))][</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Feature </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2"> - levels merged: &quot;</span>
+                         <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">liste_paires_modalities</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">liste_chi2</span><span class="p">,</span><span class="w"> </span><span class="n">p_value</span><span class="p">))])</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">break</span>
+    <span class="n">new_categories</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">X_grouped</span><span class="p">[</span><span class="n">var</span><span class="p">])</span>
+
+    <span class="c1"># Dictionary of the correspondence old category : merged category</span>
+    <span class="n">dico_regroupement</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">regrouped_cate</span> <span class="ow">in</span> <span class="n">new_categories</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">cat</span> <span class="ow">in</span> <span class="n">regrouped_cate</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; - &#39;</span><span class="p">):</span>
+            <span class="n">dico_regroupement</span><span class="p">[</span><span class="n">cat</span><span class="p">]</span> <span class="o">=</span> <span class="n">regrouped_cate</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Feature </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2"> went from </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">initial_categories</span><span class="p">)</span><span class="si">}</span><span class="s2"> to </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">new_categories</span><span class="p">)</span><span class="si">}</span><span class="s2"> levels.&quot;</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">X_grouped</span><span class="p">,</span> <span class="n">dico_regroupement</span>
+
+
+<span class="k">def</span> <span class="nf">entropy</span><span class="p">(</span><span class="n">variable</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Computes the entropy of the variable</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">stable_log</span><span class="p">(</span><span class="nb">input</span><span class="p">):</span>
+        <span class="n">copy</span> <span class="o">=</span> <span class="nb">input</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">copy</span><span class="p">[</span><span class="n">copy</span> <span class="o">&lt;=</span> <span class="mf">1e-10</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">copy</span><span class="p">)</span>
+
+    <span class="c1"># Proportion/probability of each unique value in variable</span>
+    <span class="n">prob</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">variable</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">variable</span><span class="p">)</span>
+    <span class="n">ent</span> <span class="o">=</span> <span class="o">-</span><span class="nb">sum</span><span class="p">(</span><span class="n">prob</span> <span class="o">*</span> <span class="n">stable_log</span><span class="p">(</span><span class="n">prob</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">ent</span>
+
+
+<span class="k">def</span> <span class="nf">stopping_criterion</span><span class="p">(</span><span class="n">cut_idx</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">ent</span><span class="p">,</span> <span class="n">depth</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Decided whether we should cut target at cut_idx, knowing we imagine the new entropy to be</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+    <span class="n">target_entropy</span> <span class="o">=</span> <span class="n">entropy</span><span class="p">(</span><span class="n">target</span><span class="p">)</span>
+    <span class="n">gain</span> <span class="o">=</span> <span class="n">target_entropy</span> <span class="o">-</span> <span class="n">ent</span>
+
+    <span class="n">k</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">target</span><span class="p">))</span>
+    <span class="n">k1</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">target</span><span class="p">[:</span> <span class="n">cut_idx</span><span class="p">]))</span>
+    <span class="n">k2</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">target</span><span class="p">[</span><span class="n">cut_idx</span><span class="p">:]))</span>
+
+    <span class="n">delta</span> <span class="o">=</span> <span class="p">(</span><span class="n">log</span><span class="p">(</span><span class="mi">3</span> <span class="o">**</span> <span class="n">k</span> <span class="o">-</span> <span class="mi">2</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="n">k</span> <span class="o">*</span> <span class="n">target_entropy</span> <span class="o">-</span>
+                                <span class="n">k1</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">(</span><span class="n">target</span><span class="p">[:</span> <span class="n">cut_idx</span><span class="p">])</span> <span class="o">-</span>
+                                <span class="n">k2</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">(</span><span class="n">target</span><span class="p">[</span><span class="n">cut_idx</span><span class="p">:])))</span>
+    <span class="n">cond</span> <span class="o">=</span> <span class="n">log</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">n</span> <span class="o">+</span> <span class="n">delta</span> <span class="o">/</span> <span class="n">n</span>
+    <span class="c1"># We want at least one separation</span>
+    <span class="k">if</span> <span class="n">gain</span> <span class="o">&gt;=</span> <span class="n">cond</span> <span class="ow">or</span> <span class="n">depth</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">gain</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">find_cut_index</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Finds the best place to split x</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+    <span class="n">init_entropy</span> <span class="o">=</span> <span class="mi">999999</span>
+    <span class="n">current_entropy</span> <span class="o">=</span> <span class="n">init_entropy</span>
+    <span class="n">index</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># We can&#39;t test every single value, it would take too long</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span> <span class="o">//</span> <span class="mi">100</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">step</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">!=</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]:</span>
+            <span class="n">cut</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="n">x</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="mf">2.</span>
+            <span class="c1"># Return the index where to insert item cut in list x, assuming x is sorted</span>
+            <span class="n">cutx</span> <span class="o">=</span> <span class="n">bisect_right</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">cut</span><span class="p">)</span>
+            <span class="n">weight_cutx</span> <span class="o">=</span> <span class="n">cutx</span> <span class="o">/</span> <span class="n">n</span>
+            <span class="n">left_entropy</span> <span class="o">=</span> <span class="n">weight_cutx</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">(</span><span class="n">y</span><span class="p">[:</span> <span class="n">cutx</span><span class="p">])</span>
+            <span class="n">right_entropy</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">weight_cutx</span><span class="p">)</span> <span class="o">*</span> <span class="n">entropy</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="n">cutx</span><span class="p">:])</span>
+            <span class="c1"># New entropy with the separation</span>
+            <span class="n">temp</span> <span class="o">=</span> <span class="n">left_entropy</span> <span class="o">+</span> <span class="n">right_entropy</span>
+            <span class="k">if</span> <span class="n">temp</span> <span class="o">&lt;</span> <span class="n">current_entropy</span><span class="p">:</span>
+                <span class="n">current_entropy</span> <span class="o">=</span> <span class="n">temp</span>
+                <span class="n">index</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="k">if</span> <span class="n">index</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">index</span><span class="p">,</span> <span class="n">current_entropy</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">get_index</span><span class="p">(</span><span class="n">xo</span><span class="p">,</span> <span class="n">yo</span><span class="p">,</span> <span class="n">low</span><span class="p">,</span> <span class="n">upp</span><span class="p">,</span> <span class="n">depth</span><span class="p">):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">xo</span><span class="p">[</span><span class="n">low</span><span class="p">:</span><span class="n">upp</span><span class="p">]</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">yo</span><span class="p">[</span><span class="n">low</span><span class="p">:</span><span class="n">upp</span><span class="p">]</span>
+    <span class="c1"># Finds the best place to split, if we had to split</span>
+    <span class="n">cut</span> <span class="o">=</span> <span class="n">find_cut_index</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cut</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">cut_index</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cut</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">current_entropy</span> <span class="o">=</span> <span class="n">cut</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="c1"># Checks whether it is worth it to split</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">stopping_criterion</span><span class="p">(</span><span class="n">cut_index</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">y</span><span class="p">),</span>
+                             <span class="n">current_entropy</span><span class="p">,</span> <span class="n">depth</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">ret</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">cut_index</span><span class="p">,</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span> <span class="nf">part</span><span class="p">(</span><span class="n">xo</span><span class="p">,</span> <span class="n">yo</span><span class="p">,</span> <span class="n">low</span><span class="p">,</span> <span class="n">upp</span><span class="p">,</span> <span class="n">cut_points</span><span class="p">,</span> <span class="n">depth</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Recursive function with returns the cuts_points</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">xo</span><span class="p">[</span><span class="n">low</span><span class="p">:</span> <span class="n">upp</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cut_points</span>
+    <span class="n">cc</span> <span class="o">=</span> <span class="n">get_index</span><span class="p">(</span><span class="n">xo</span><span class="p">,</span> <span class="n">yo</span><span class="p">,</span> <span class="n">low</span><span class="p">,</span> <span class="n">upp</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cut_points</span>
+    <span class="n">ci</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cc</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">depth</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">cc</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">cut_points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cut_points</span><span class="p">,</span> <span class="n">low</span> <span class="o">+</span> <span class="n">ci</span><span class="p">)</span>
+    <span class="n">cut_points</span> <span class="o">=</span> <span class="n">cut_points</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span>
+    <span class="n">cut_points</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="c1"># We choose to have a maximum of 8 categories in total</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cut_points</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">cut_points</span>
+    <span class="k">return</span> <span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">part</span><span class="p">(</span><span class="n">xo</span><span class="p">,</span> <span class="n">yo</span><span class="p">,</span> <span class="n">low</span><span class="p">,</span> <span class="n">low</span> <span class="o">+</span> <span class="n">ci</span><span class="p">,</span> <span class="n">cut_points</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">))</span> <span class="o">+</span>
+            <span class="nb">list</span><span class="p">(</span><span class="n">part</span><span class="p">(</span><span class="n">xo</span><span class="p">,</span> <span class="n">yo</span><span class="p">,</span> <span class="n">low</span> <span class="o">+</span> <span class="n">ci</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">upp</span><span class="p">,</span> <span class="n">cut_points</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">)))</span>
+
+
+<span class="k">def</span> <span class="nf">cut_points</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Computes the cut values on x to minimize the entropy (on y)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">part</span><span class="p">(</span><span class="n">xo</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">yo</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">low</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">upp</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">cut_points</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([]),</span> <span class="n">depth</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">cut_value</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">res</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">cut_index</span> <span class="o">=</span> <span class="n">res</span>
+        <span class="k">for</span> <span class="n">indices</span> <span class="ow">in</span> <span class="n">cut_index</span><span class="p">:</span>
+            <span class="c1"># Gets the cut value from the cut index</span>
+            <span class="n">cut_value</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">x</span><span class="p">[</span><span class="n">indices</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">x</span><span class="p">[</span><span class="n">indices</span><span class="p">])</span> <span class="o">/</span> <span class="mf">2.0</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">cut_value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span> <span class="nf">apply_discretization</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">cut_values</span><span class="p">):</span>
+    <span class="n">cut_values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">cut_values</span><span class="p">))</span>
+    <span class="n">cut_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+    <span class="n">x_discrete</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">))])</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Feature </span><span class="si">{</span><span class="n">var</span><span class="si">}</span><span class="s2"> discretized in </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">cut_values</span><span class="p">)</span><span class="si">}</span><span class="s2"> bin(s).&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">cut_values</span><span class="p">)):</span>
+        <span class="n">row_filter</span> <span class="o">=</span> <span class="p">(</span><span class="n">cut_values</span><span class="p">[</span><span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">x</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">x</span> <span class="o">&lt;=</span> <span class="n">cut_values</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+        <span class="n">x_discrete</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">row_filter</span><span class="p">)[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">X</span><span class="p">[</span><span class="n">var</span><span class="p">]</span> <span class="o">=</span> <span class="n">x_discrete</span>
+    <span class="k">return</span> <span class="n">X</span>
+
+
+<span class="k">def</span> <span class="nf">discretize_feature</span><span class="p">(</span><span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">var</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">var_predite</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Discretizes the continuous variable X[var], using the target value var_predite</span>
+<span class="sd">    MDPL (Minimum Description Length Principle)</span>
+
+<span class="sd">    :param pandas.DataFrame X:</span>
+<span class="sd">    :param str var:</span>
+<span class="sd">    :param str var_predite:</span>
+<span class="sd">    :return:</span>
+<span class="sd">    :rtype: (pandas.DataFrame, list)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">sort_values</span><span class="p">()</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">var_predite</span><span class="p">][</span><span class="n">x</span><span class="o">.</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+    <span class="n">binning</span> <span class="o">=</span> <span class="n">cut_points</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">y</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">apply_discretization</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">binning</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">binning</span>
+
+
+<span class="k">def</span> <span class="nf">_categorie_data_bin_train</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">var_cible</span><span class="p">,</span> <span class="n">categorical</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">discretize</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Binarise the categorical variables (after merging categories)</span>
+<span class="sd">    Returns the data, the encoder and the column labels</span>
+
+<span class="sd">    :param pandas.DataFrame data: data with some variables being categorical</span>
+<span class="sd">    :param str var_cible: name of target</span>
+<span class="sd">    :param list categorical: list of categorical features&#39; names</span>
+<span class="sd">    :param bool discretize: whether to discretize continuous features</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">to_change</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">merged_cat</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">categorical</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">categorical</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+                <span class="n">X</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+                <span class="n">X</span><span class="p">,</span> <span class="n">dico</span> <span class="o">=</span> <span class="n">grouping</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">var_cible</span><span class="p">)</span>
+                <span class="n">merged_cat</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">dico</span>
+
+    <span class="n">discret_cat</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="n">discretize</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">categorical</span> <span class="ow">and</span> <span class="n">column</span> <span class="o">!=</span> <span class="n">var_cible</span><span class="p">:</span>
+                <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+                <span class="n">X</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                <span class="n">X</span><span class="p">,</span> <span class="n">binning</span> <span class="o">=</span> <span class="n">discretize_feature</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">var_cible</span><span class="p">)</span>
+                <span class="n">discret_cat</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">binning</span>
+
+    <span class="k">if</span> <span class="n">var_cible</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">X</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="n">var_cible</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">enc</span> <span class="o">=</span> <span class="n">OneHotEncoder</span><span class="p">(</span><span class="n">sparse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">handle_unknown</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">to_change</span><span class="p">:</span>
+        <span class="n">X_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">to_change</span><span class="p">])</span>
+        <span class="n">labels_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">get_feature_names_out</span><span class="p">()</span>
+        <span class="n">X_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_cat</span><span class="p">)</span>
+        <span class="n">X_cat</span> <span class="o">=</span> <span class="n">X_cat</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># Used when we had decided to keep the continuous numerical variables</span>
+    <span class="n">X_num</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">X_num_transformed</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">col_num</span> <span class="o">=</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span>
+    <span class="n">labels_num</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">scaler</span> <span class="o">=</span> <span class="n">StandardScaler</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">col_num</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">col_num</span><span class="p">:</span>
+            <span class="n">labels_num</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+            <span class="n">col</span> <span class="o">=</span> <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">col</span><span class="o">.</span><span class="n">dtypes</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="s2">&quot;int64&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">,</span> <span class="s2">&quot;float64&quot;</span><span class="p">):</span>
+                <span class="n">X_num</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">X_num_transformed</span> <span class="o">=</span> <span class="n">scaler</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X_num</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">X_cat</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">X_num_transformed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">X_train</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_num_transformed</span><span class="p">),</span> <span class="n">X_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="o">*</span><span class="n">labels_num</span><span class="p">,</span> <span class="o">*</span><span class="n">labels_cat</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">X_cat</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">X_train</span> <span class="o">=</span> <span class="n">X_cat</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">labels_cat</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">X_train</span> <span class="o">=</span> <span class="n">X_num</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">labels_num</span>
+    <span class="k">return</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">enc</span><span class="p">,</span> <span class="n">merged_cat</span><span class="p">,</span> <span class="n">discret_cat</span><span class="p">,</span> <span class="n">scaler</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">col_num</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_categorie_data_bin_test</span><span class="p">(</span><span class="n">data_val</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">enc</span><span class="p">:</span> <span class="n">OneHotEncoder</span><span class="p">,</span> <span class="n">scaler</span><span class="p">:</span> <span class="n">StandardScaler</span><span class="p">,</span> <span class="n">merged_cat</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+                             <span class="n">discret_cat</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">categorical</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">discretize</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Data treatment of the test data, using the method (merged categories, discretisation, OneHotEncoder) learned on</span>
+<span class="sd">    the train data</span>
+
+<span class="sd">    :param pandas.Dataframe data_val:</span>
+<span class="sd">        Data with some variables being categorical</span>
+<span class="sd">    :param sklearn.preprocessing.OneHotEncoder enc:</span>
+<span class="sd">        OneHotEncoder fitted on the categorical training data</span>
+<span class="sd">    :param sklearn.preprocessing.StandardScaler scaler:</span>
+<span class="sd">        StandardScaler fitted on the numerical training data</span>
+<span class="sd">    :param dict merged_cat: merged categories</span>
+<span class="sd">    :param dict discret_cat: discretized categories</span>
+<span class="sd">    :param list categorical: list of categorical features&#39; names</span>
+<span class="sd">    :param bool discretize: whether numerical features were discretized</span>
+<span class="sd">    :return: treated data</span>
+<span class="sd">    :rtype:pandas.DataFrame</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">categorical</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">categorical</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">data_val</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">to_change</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">merged_cat</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">+</span> <span class="n">categorical</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_val</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+            <span class="n">X_val</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="c1"># Merging the categories</span>
+    <span class="n">X_val</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">merged_cat</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">discretize</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_val</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">set</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">merged_cat</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">+</span> <span class="n">categorical</span><span class="p">):</span>
+                <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+                <span class="n">X_val</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                <span class="n">X_val</span> <span class="o">=</span> <span class="n">apply_discretization</span><span class="p">(</span><span class="n">X_val</span><span class="p">,</span> <span class="n">column</span><span class="p">,</span> <span class="n">discret_cat</span><span class="p">[</span><span class="n">column</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="n">to_change</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">enc</span><span class="o">.</span><span class="n">feature_names_in_</span><span class="p">)</span> <span class="o">==</span> <span class="nb">set</span><span class="p">(</span><span class="n">to_change</span><span class="p">)</span>  <span class="c1"># nosec</span>
+        <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X_val</span><span class="p">[</span><span class="n">enc</span><span class="o">.</span><span class="n">feature_names_in_</span><span class="p">])</span>
+        <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_val_cat</span><span class="p">)</span>
+
+    <span class="n">X_val_num</span> <span class="o">=</span> <span class="n">X_val</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_val_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">col</span> <span class="o">=</span> <span class="n">X_val_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">col</span><span class="o">.</span><span class="n">dtypes</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="s2">&quot;int64&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">,</span> <span class="s2">&quot;float64&quot;</span><span class="p">):</span>
+            <span class="n">X_val_num</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+    <span class="c1"># Need to reset the index for the concat to work well (when not same index)</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">X_val_cat</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">X_val_num</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
+        <span class="n">X_val_num_transformed</span> <span class="o">=</span> <span class="n">scaler</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X_val_num</span><span class="p">)</span>
+        <span class="n">X_test</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_val_num_transformed</span><span class="p">),</span> <span class="n">X_val_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">X_test</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">X_val_cat</span>
+
+
+<span class="k">def</span> <span class="nf">create_reduction_matrix</span><span class="p">(</span><span class="n">reductions</span><span class="p">,</span> <span class="n">clustered</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">chi0</span><span class="p">,</span> <span class="n">pd</span><span class="p">):</span>
+    <span class="c1"># Matrix of the changes of chi2 for every pair grouped</span>
+    <span class="k">for</span> <span class="n">count1</span><span class="p">,</span> <span class="n">value1</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
+        <span class="c1"># 0, modality0 ...</span>
+        <span class="k">for</span> <span class="n">count2</span><span class="p">,</span> <span class="n">value2</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">labels</span><span class="p">[</span><span class="n">count1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:],</span> <span class="n">start</span><span class="o">=</span><span class="n">count1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="c1"># count1+1, modality7 ...</span>
+            <span class="k">if</span> <span class="n">count1</span> <span class="o">!=</span> <span class="n">count2</span><span class="p">:</span>
+                <span class="c1"># New matrix once we have merged the two</span>
+                <span class="n">contingency_matrix</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">contingency_matrix</span><span class="p">(</span>
+                    <span class="n">clustered</span><span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="n">value1</span><span class="p">:</span> <span class="n">value2</span><span class="p">},</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">pd</span><span class="p">)</span>
+                <span class="c1"># stat chi2, p-value, degree of freedom, expected frequencies</span>
+                <span class="n">g</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">dof</span><span class="p">,</span> <span class="n">expctd</span> <span class="o">=</span> <span class="n">chi2_contingency</span><span class="p">(</span><span class="n">contingency_matrix</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="s2">&quot;log-likelihood&quot;</span><span class="p">)</span>
+                <span class="n">reductions</span><span class="p">[</span><span class="n">count1</span><span class="p">,</span> <span class="n">count2</span><span class="p">]</span> <span class="o">=</span> <span class="n">FORMAT</span><span class="o">.</span><span class="n">format</span><span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">g</span> <span class="o">/</span> <span class="n">chi0</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">reductions</span>
+
+
+<span class="k">def</span> <span class="nf">update_reduction_matrix</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">var_predite</span><span class="p">,</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">clustered</span><span class="p">,</span> <span class="n">ind</span><span class="p">,</span> <span class="n">chi0</span><span class="p">):</span>
+    <span class="c1"># Update reduction matrix after finding the two categories that will impact the least our chi2</span>
+    <span class="n">pd</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">var_predite</span><span class="p">]</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+    <span class="c1"># Replace the second category by the first in the categorical variable to get the new chi2</span>
+    <span class="n">clustered</span><span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="n">labels</span><span class="p">[</span><span class="n">ind</span><span class="p">[</span><span class="mi">1</span><span class="p">]]:</span> <span class="n">labels</span><span class="p">[</span><span class="n">ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]]},</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># Replace all the values of chi2 related to ind[0] (new index for the merged category)</span>
+    <span class="k">for</span> <span class="n">count</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">labels</span><span class="p">):</span>
+        <span class="n">contingency_matrix</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">contingency_matrix</span><span class="p">(</span>
+            <span class="n">clustered</span><span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="n">value</span><span class="p">:</span> <span class="n">labels</span><span class="p">[</span><span class="n">ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]]},</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">pd</span><span class="p">)</span>
+        <span class="n">g</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">dof</span><span class="p">,</span> <span class="n">expctd</span> <span class="o">=</span> <span class="n">chi2_contingency</span><span class="p">(</span><span class="n">contingency_matrix</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="s2">&quot;log-likelihood&quot;</span><span class="p">)</span>
+        <span class="c1"># Fills in (in the good half) the new values</span>
+        <span class="k">if</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="n">ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">matrix</span><span class="p">[</span><span class="n">ind</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">count</span><span class="p">]</span> <span class="o">=</span> <span class="n">FORMAT</span><span class="o">.</span><span class="n">format</span><span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">g</span> <span class="o">/</span> <span class="n">chi0</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">count</span> <span class="o">&lt;</span> <span class="n">ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">matrix</span><span class="p">[</span><span class="n">count</span><span class="p">,</span> <span class="n">ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">FORMAT</span><span class="o">.</span><span class="n">format</span><span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">g</span> <span class="o">/</span> <span class="n">chi0</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">matrix</span>
+
+
+<span class="k">def</span> <span class="nf">green_clust</span><span class="p">(</span><span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">var</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">var_predite</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">num_clusters</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    GreenClust algorithm to group modalities</span>
+
+<span class="sd">    :param pandas.Dataframe X:</span>
+<span class="sd">        Data with some variables being categorical</span>
+<span class="sd">    :param str var:</span>
+<span class="sd">        Column for which we apply the algorithm</span>
+<span class="sd">    :param str var_predite:</span>
+<span class="sd">        Column we aim to predict</span>
+<span class="sd">    :param int num_clusters:</span>
+<span class="sd">        Number of modalities we want</span>
+<span class="sd">     &quot;&quot;&quot;</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="c1"># Necessary to be able to compare (and unique) categories</span>
+    <span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="c1"># Get the modalities</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+    <span class="n">clustered</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="c1"># Square matrix (each line/column = a category), each cell represents the impact on chi2 if we merge the row &amp;</span>
+    <span class="c1"># column categories</span>
+    <span class="n">reductions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)))</span>
+    <span class="n">reductions</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">NaN</span>
+    <span class="c1"># List of index of categories merged to another category, then ignored in the reduction matrix</span>
+    <span class="n">forgotten_rows</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">pd</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">var_predite</span><span class="p">]</span>
+    <span class="n">clusters</span> <span class="o">=</span> <span class="p">[</span><span class="o">*</span><span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">),</span> <span class="mi">1</span><span class="p">)]</span>
+    <span class="c1"># Clusters is a list of lists that will contain the new groups</span>
+    <span class="n">clusters</span> <span class="o">=</span> <span class="p">[[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">clusters</span><span class="p">]</span>
+    <span class="n">contingency_matrix</span> <span class="o">=</span> <span class="n">metrics</span><span class="o">.</span><span class="n">cluster</span><span class="o">.</span><span class="n">contingency_matrix</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="n">var</span><span class="p">],</span> <span class="n">pd</span><span class="p">)</span>
+    <span class="c1"># Get the inital chi2 for the impact of grouping modalities</span>
+    <span class="n">chi0</span><span class="p">,</span> <span class="n">p</span><span class="p">,</span> <span class="n">dof</span><span class="p">,</span> <span class="n">expctd</span> <span class="o">=</span> <span class="n">chi2_contingency</span><span class="p">(</span><span class="n">contingency_matrix</span><span class="p">,</span> <span class="n">lambda_</span><span class="o">=</span><span class="s2">&quot;log-likelihood&quot;</span><span class="p">)</span>
+    <span class="n">reductions</span> <span class="o">=</span> <span class="n">create_reduction_matrix</span><span class="p">(</span><span class="n">reductions</span><span class="p">,</span> <span class="n">clustered</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">chi0</span><span class="p">,</span> <span class="n">pd</span><span class="p">)</span>
+    <span class="c1"># keep merging until we reach the number of desired groups</span>
+    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">clusters</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">num_clusters</span><span class="p">:</span>
+        <span class="c1"># Get the minimum chi2 indices in the reduction matrix without taking into account the forgotten rows</span>
+        <span class="c1"># Smallest reduction = biggest chi2 test statistic = most dependant variables</span>
+        <span class="n">min_chi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">reductions</span><span class="p">,</span> <span class="n">forgotten_rows</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">forgotten_rows</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">ind</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argwhere</span><span class="p">(</span><span class="n">reductions</span> <span class="o">==</span> <span class="n">min_chi</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="c1"># For the indices of the min chi2, add the second index to forgetten rows (ind[1] now be ind[0]</span>
+        <span class="n">forgotten_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ind</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="c1"># update the values of chi2 in the reduction matrix after merging the indices in the clustered column</span>
+        <span class="n">reductions</span> <span class="o">=</span> <span class="n">update_reduction_matrix</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">var</span><span class="p">,</span> <span class="n">var_predite</span><span class="p">,</span> <span class="n">reductions</span><span class="p">,</span> <span class="n">clustered</span><span class="p">,</span> <span class="n">ind</span><span class="p">,</span> <span class="n">chi0</span><span class="p">)</span>
+        <span class="c1"># And finally merging them in the clusters variable</span>
+        <span class="n">cluster1</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">flatten</span><span class="p">([</span><span class="n">sublist</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">clusters</span> <span class="k">if</span> <span class="n">ind</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="n">sublist</span><span class="p">]))</span>
+        <span class="n">cluster2</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">flatten</span><span class="p">([</span><span class="n">sublist</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">clusters</span> <span class="k">if</span> <span class="n">ind</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">in</span> <span class="n">sublist</span><span class="p">]))</span>
+        <span class="n">clusters</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">cluster1</span><span class="p">)</span>
+        <span class="n">clusters</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">cluster2</span><span class="p">)</span>
+        <span class="n">clusters</span> <span class="o">+=</span> <span class="p">[</span><span class="n">cluster1</span> <span class="o">+</span> <span class="n">cluster2</span><span class="p">]</span>
+
+    <span class="n">dico_regroupement</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">clusters</span><span class="p">:</span>
+        <span class="n">cluster</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">ind</span> <span class="ow">in</span> <span class="n">group</span><span class="p">:</span>
+            <span class="n">cluster</span> <span class="o">+=</span> <span class="p">[</span><span class="n">labels</span><span class="p">[</span><span class="n">ind</span><span class="p">]]</span>
+        <span class="n">name_cluster</span> <span class="o">=</span> <span class="s1">&#39; - &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cluster</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ind</span> <span class="ow">in</span> <span class="n">group</span><span class="p">:</span>
+            <span class="n">dico_regroupement</span><span class="p">[</span><span class="n">labels</span><span class="p">[</span><span class="n">ind</span><span class="p">]]</span> <span class="o">=</span> <span class="n">name_cluster</span>
+
+    <span class="n">df</span><span class="o">.</span><span class="n">replace</span><span class="p">({</span><span class="n">var</span><span class="p">:</span> <span class="n">dico_regroupement</span><span class="p">},</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">df</span><span class="p">,</span> <span class="n">dico_regroupement</span>
+
+
+<span class="k">def</span> <span class="nf">categorie_data_labels</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">data_val</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">categorical</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+    <span class="c1"># if categorical is None:</span>
+    <span class="c1">#     categorical = [&quot;Categ_NAF_Pro_Agri&quot;, &quot;CRED_Null_Regroup_CATEG_REV&quot;, &quot;CRED_Null_Regroup_CATEG_CONSO&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Regroup_CATEG_HAB&quot;, &quot;CRED_Null_Regroup_CATEG_PRET&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_Dest_fin_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_Dest_fin_Hab&quot;, &quot;CRED_Null_Group_Dest_fin_tiers&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_bien_fin_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_bien_fin_Hab&quot;, &quot;CRED_Null_Group_bien_fin_tiers&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_interv_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_interv_Hab&quot;, &quot;CRED_Null_Group_interv_tiers&quot;, &quot;regroup_categ_juridique&quot;,</span>
+    <span class="c1">#                    &quot;Regroup_CSP_Initiale&quot;, &quot;REGIME_MATRIMONIAL&quot;, &quot;CAPACITE_JURIDIQUE&quot;, &quot;Type_Option&quot;,</span>
+    <span class="c1">#                    &quot;TOP_SEUIL_New_def&quot;, &quot;segment&quot;, &quot;incident&quot;]</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">data_val</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">to_change</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">categorical</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+            <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="n">enc</span> <span class="o">=</span> <span class="n">LabelEncoder</span><span class="p">()</span>
+            <span class="n">X_val_cat</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">enc</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]))</span>
+            <span class="n">X_cat</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">enc</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]))</span>
+
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_cat</span><span class="p">)</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_val_cat</span><span class="p">)</span>
+
+    <span class="n">X_num</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span> <span class="ow">in</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">X_num</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_val_num</span> <span class="o">=</span> <span class="n">X_val</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span> <span class="ow">in</span> <span class="n">X_val_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">X_val_num</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">col</span> <span class="o">=</span> <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">col</span><span class="o">.</span><span class="n">dtypes</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="s2">&quot;int64&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">,</span> <span class="s2">&quot;float64&quot;</span><span class="p">):</span>
+            <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">col</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+            <span class="n">X_val_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">col</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">X_num</span><span class="p">,</span> <span class="n">X_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">X_val_num</span><span class="p">,</span> <span class="n">X_val_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">categorie_data_bin_train_test</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span>
+                                  <span class="n">data_val</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">categorical</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+    <span class="c1"># if categorical is None:</span>
+    <span class="c1">#     categorical = [&quot;Categ_NAF_Pro_Agri&quot;, &quot;CRED_Null_Regroup_CATEG_REV&quot;, &quot;CRED_Null_Regroup_CATEG_CONSO&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Regroup_CATEG_HAB&quot;, &quot;CRED_Null_Regroup_CATEG_PRET&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_Dest_fin_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_Dest_fin_Hab&quot;, &quot;CRED_Null_Group_Dest_fin_tiers&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_bien_fin_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_bien_fin_Hab&quot;, &quot;CRED_Null_Group_bien_fin_tiers&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_interv_Conso&quot;,</span>
+    <span class="c1">#                    &quot;CRED_Null_Group_interv_Hab&quot;, &quot;CRED_Null_Group_interv_tiers&quot;, &quot;regroup_categ_juridique&quot;,</span>
+    <span class="c1">#                    &quot;Regroup_CSP_Initiale&quot;, &quot;REGIME_MATRIMONIAL&quot;, &quot;CAPACITE_JURIDIQUE&quot;, &quot;Type_Option&quot;,</span>
+    <span class="c1">#                    &quot;TOP_SEUIL_New_def&quot;, &quot;segment&quot;, &quot;incident&quot;]</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">data_val</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">to_change</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">categorical</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+            <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+            <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+    <span class="n">enc</span> <span class="o">=</span> <span class="n">OneHotEncoder</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="s1">&#39;first&#39;</span><span class="p">,</span> <span class="n">sparse</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">handle_unknown</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">)</span>
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">X</span><span class="p">[</span><span class="n">to_change</span><span class="p">]))</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">X_val</span><span class="p">[</span><span class="n">to_change</span><span class="p">]))</span>
+    <span class="n">labels_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">get_feature_names_out</span><span class="p">()</span>
+
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_cat</span><span class="p">)</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_val_cat</span><span class="p">)</span>
+
+    <span class="n">X_num</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span> <span class="ow">in</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">X_num</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">col_num</span> <span class="o">=</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span>
+    <span class="n">labels_num</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">col_num</span><span class="p">:</span>
+        <span class="n">labels_num</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+    <span class="n">X_val_num</span> <span class="o">=</span> <span class="n">X_val</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span> <span class="ow">in</span> <span class="n">X_val_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">X_val_num</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">col</span> <span class="o">=</span> <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">col</span><span class="o">.</span><span class="n">dtypes</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="s2">&quot;int64&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">,</span> <span class="s2">&quot;float64&quot;</span><span class="p">]:</span>
+            <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+            <span class="n">X_val_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+    <span class="c1"># Need to reset the index for the concat to work well (when not same index)</span>
+    <span class="n">X_cat</span> <span class="o">=</span> <span class="n">X_cat</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">X_val_cat</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_num</span> <span class="o">=</span> <span class="n">X_num</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_val_num</span> <span class="o">=</span> <span class="n">X_val_num</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="n">X_train</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">X_num</span><span class="p">,</span> <span class="n">X_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_test</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">X_val_num</span><span class="p">,</span> <span class="n">X_val_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="o">*</span><span class="n">labels_num</span><span class="p">,</span> <span class="o">*</span><span class="n">labels_cat</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">labels</span>
+
+
+<span class="k">def</span> <span class="nf">bin_data_cate_test</span><span class="p">(</span><span class="n">data_val</span><span class="p">,</span> <span class="n">enc</span><span class="p">,</span> <span class="n">categorical</span><span class="p">):</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">data_val</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="c1"># categorical = [&quot;Categ_NAF_Pro_Agri&quot;, &quot;CRED_Null_Regroup_CATEG_REV&quot;, &quot;CRED_Null_Regroup_CATEG_CONSO&quot;,</span>
+    <span class="c1">#                &quot;CRED_Null_Regroup_CATEG_HAB&quot;, &quot;CRED_Null_Regroup_CATEG_PRET&quot;, &quot;CRED_Null_Group_Dest_fin_Conso&quot;,</span>
+    <span class="c1">#                &quot;CRED_Null_Group_Dest_fin_Hab&quot;, &quot;CRED_Null_Group_Dest_fin_tiers&quot;, &quot;CRED_Null_Group_bien_fin_Conso&quot;,</span>
+    <span class="c1">#                &quot;CRED_Null_Group_bien_fin_Hab&quot;, &quot;CRED_Null_Group_bien_fin_tiers&quot;, &quot;CRED_Null_Group_interv_Conso&quot;,</span>
+    <span class="c1">#                &quot;CRED_Null_Group_interv_Hab&quot;, &quot;CRED_Null_Group_interv_tiers&quot;, &quot;regroup_categ_juridique&quot;,</span>
+    <span class="c1">#                &quot;Regroup_CSP_Initiale&quot;, &quot;REGIME_MATRIMONIAL&quot;, &quot;CAPACITE_JURIDIQUE&quot;, &quot;Type_Option&quot;,</span>
+    <span class="c1">#                &quot;TOP_SEUIL_New_def&quot;, &quot;segment&quot;, &quot;incident&quot;]</span>
+    <span class="n">to_change</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">categorical</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_val</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">to_change</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+            <span class="n">X_val</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_val</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">categorical</span><span class="p">:</span>
+            <span class="n">X_val</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">enc</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X_val</span><span class="p">[</span><span class="n">to_change</span><span class="p">])</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">X_val_cat</span><span class="p">)</span>
+
+    <span class="n">X_val_num</span> <span class="o">=</span> <span class="n">X_val</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">to_change</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_val_num</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">col</span> <span class="o">=</span> <span class="n">X_val_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">col</span><span class="o">.</span><span class="n">dtypes</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;int32&quot;</span><span class="p">,</span> <span class="s2">&quot;int64&quot;</span><span class="p">,</span> <span class="s2">&quot;float32&quot;</span><span class="p">,</span> <span class="s2">&quot;float64&quot;</span><span class="p">):</span>
+            <span class="n">X_val_num</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">X_val_num</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+    <span class="c1"># Need to reset the index for the concat to work well (when not same index)</span>
+    <span class="n">X_val_cat</span> <span class="o">=</span> <span class="n">X_val_cat</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_val_num</span> <span class="o">=</span> <span class="n">X_val_num</span><span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_test</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">X_val_num</span><span class="p">,</span> <span class="n">X_val_cat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">X_test</span>
+
+
+<span class="k">def</span> <span class="nf">extreme_values</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">missing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Deals with extreme values (ex : NaN, or not filled)</span>
+<span class="sd">    Creates (or not) a column signaling which values were missing</span>
+
+<span class="sd">    :param pandas.DataFrame data: data to clean</span>
+<span class="sd">    :param bool missing: whether or not to create a column signaling missing values</span>
+<span class="sd">    :rtype: pandas.DataFrame</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Valeurs extremes quand valeurs manquantes</span>
+    <span class="n">extremes</span> <span class="o">=</span> <span class="p">[</span><span class="mi">99999</span><span class="p">,</span> <span class="mf">99999.99</span><span class="p">,</span> <span class="mf">999999.0</span><span class="p">,</span> <span class="mf">9.999999999999E10</span><span class="p">,</span> <span class="mf">99999999999.99</span><span class="p">,</span> <span class="mi">999</span><span class="p">,</span> <span class="s1">&#39;NR&#39;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">data</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">to_replace</span><span class="o">=</span><span class="n">extremes</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">NaN</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+        <span class="c1"># Creation de colonnes de variables présentes/absentes</span>
+        <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">column</span><span class="p">]</span>
+            <span class="k">if</span> <span class="kc">None</span> <span class="ow">in</span> <span class="n">values</span> <span class="ow">or</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+                <span class="n">new_column_name</span> <span class="o">=</span> <span class="s2">&quot;Exists_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">column</span><span class="p">)</span>
+                <span class="n">new_column</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)):</span>
+                    <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">pd</span><span class="o">.</span><span class="n">isna</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">iloc</span><span class="p">[</span><span class="n">i</span><span class="p">]):</span>
+                        <span class="n">new_column</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">new_column</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">new_column_name</span><span class="p">,</span> <span class="n">new_column</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="n">column</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">dav_null</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;DAV_Null_INDIC_TIERS_CONTENTIEUX&quot;</span><span class="p">,</span> <span class="s2">&quot;DAV_Null_INDIC_TIERS_NEIERTZ&quot;</span><span class="p">,</span> <span class="s2">&quot;DAV_Null_INDIC_PERS_FICP&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;DAV_Null_PERS_SAISIE_ATTRIB&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;DAV_Null_INDIC_PERS_TUTELLE&quot;</span><span class="p">,</span> <span class="s2">&quot;DAV_Null_INDIC_PERS_CURATELLE&quot;</span><span class="p">,</span> <span class="s2">&quot;DAV_Null_INDIC_PERS_NEIERTZ&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;DAV_Null_INDIC_PERS_REDRST_JUDIC&quot;</span><span class="p">,</span> <span class="s2">&quot;DAV_Null_INDIC_PERS_CONSTIT_STE&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;DAV_Null_INDIC_PERS_LIQUID_JUDIC&quot;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">dav_null</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">data</span><span class="p">[</span><span class="n">column</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">([</span><span class="s1">&#39;0&#39;</span><span class="p">,</span> <span class="s1">&#39;1&#39;</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">data</span>
+
+
+<span class="k">def</span> <span class="nf">traitement_train_val</span><span class="p">(</span><span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">X_val</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Traite les données et les données de test en gérant les valeurs extremes, les variables catégoriques et en</span>
+<span class="sd">    normalisant</span>
+<span class="sd">    Retourne les données traitées et les labels des colonnes</span>
+
+<span class="sd">    :param pandas.DataFrame X:</span>
+<span class="sd">        Data with some variables being categorical</span>
+<span class="sd">    :param pandas.DataFrame X_val:</span>
+<span class="sd">        Validation data with some variables being categorical</span>
+<span class="sd">    :return: les données traitées et les labels des colonnes</span>
+<span class="sd">    :rtype: tuple</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">extreme_values</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">missing</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">extreme_values</span><span class="p">(</span><span class="n">X_val</span><span class="p">,</span> <span class="n">missing</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="n">categorie_data_bin_train_test</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">X_val</span><span class="p">)</span>
+
+    <span class="c1"># Vérifie qu&#39;on a bien les mêmes colonnes dans les données train / test</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_train</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">X_test</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">X_train</span> <span class="o">=</span> <span class="n">X_train</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">X_test</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">column</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">X_train</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+            <span class="n">X_test</span> <span class="o">=</span> <span class="n">X_test</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">column</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="c1"># Normalisation</span>
+    <span class="n">scaler</span> <span class="o">=</span> <span class="n">StandardScaler</span><span class="p">()</span>
+    <span class="n">X_train</span> <span class="o">=</span> <span class="n">scaler</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X_train</span><span class="p">)</span>
+    <span class="n">X_test</span> <span class="o">=</span> <span class="n">scaler</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X_test</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">X_train</span><span class="p">,</span> <span class="n">X_test</span><span class="p">,</span> <span class="n">labels</span>
+
+
+<span class="k">def</span> <span class="nf">traitement_val</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">enc</span><span class="p">:</span> <span class="n">OneHotEncoder</span><span class="p">,</span> <span class="n">scaler</span><span class="p">:</span> <span class="n">StandardScaler</span><span class="p">,</span> <span class="n">merged_cat</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+                   <span class="n">discret_cat</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">categorical</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span> <span class="n">discretize</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Traite les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant</span>
+<span class="sd">    Retourne les données traitées</span>
+
+<span class="sd">    :param pandas.Dataframe data:</span>
+<span class="sd">        Data with some variables being categorical</span>
+<span class="sd">    :param sklearn.preprocessing.OneHotEncoder enc:</span>
+<span class="sd">        OneHotEncoder fitted on the training data</span>
+<span class="sd">    :param sklearn.preprocessing.StandardScaler scaler:</span>
+<span class="sd">        StandardScaler fitted on the training data</span>
+<span class="sd">    :param dict merged_cat:</span>
+<span class="sd">        Merged categories for each column</span>
+<span class="sd">    :param dict discret_cat:</span>
+<span class="sd">        Binning for the discretisation for each column</span>
+<span class="sd">    :param list categorical:</span>
+<span class="sd">        Names for categorical features</span>
+<span class="sd">    :param bool discretize:</span>
+<span class="sd">        Whether numerical features were discretized</span>
+<span class="sd">    :return: preprocessed validation data</span>
+<span class="sd">    :rtype: pandas.DataFrame</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span> <span class="ow">in</span> <span class="n">X_val</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+        <span class="n">X_val</span><span class="o">.</span><span class="n">drop</span><span class="p">([</span><span class="s2">&quot;Defaut_12_Mois_contagion&quot;</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">extreme_values</span><span class="p">(</span><span class="n">X_val</span><span class="p">,</span> <span class="n">missing</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">X_val</span> <span class="o">=</span> <span class="n">_categorie_data_bin_test</span><span class="p">(</span><span class="n">data_val</span><span class="o">=</span><span class="n">X_val</span><span class="p">,</span> <span class="n">enc</span><span class="o">=</span><span class="n">enc</span><span class="p">,</span> <span class="n">scaler</span><span class="o">=</span><span class="n">scaler</span><span class="p">,</span>
+                                     <span class="n">merged_cat</span><span class="o">=</span><span class="n">merged_cat</span><span class="p">,</span> <span class="n">discret_cat</span><span class="o">=</span><span class="n">discret_cat</span><span class="p">,</span>
+                                     <span class="n">categorical</span><span class="o">=</span><span class="n">categorical</span><span class="p">,</span> <span class="n">discretize</span><span class="o">=</span><span class="n">discretize</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">X_val</span>
+
+
+<span class="k">def</span> <span class="nf">traitement_train</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">categorical</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">discretize</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Traite les données en gérant les valeurs extremes, les variables catégoriques et en normalisant</span>
+
+<span class="sd">    :param pandas.Dataframe data: data with some variables being categorical</span>
+<span class="sd">    :param str target: variable cible</span>
+<span class="sd">    :param list categorical: list of categorical features&#39; names</span>
+<span class="sd">    :param bool discretize: whether to discretize continuous features</span>
+<span class="sd">    :return: processed data, labels of columns, encoder for categorical data and scaler for numerical data</span>
+<span class="sd">    :rtype: tuple</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">target</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span> <span class="ow">and</span> <span class="n">X</span><span class="p">[</span><span class="n">target</span><span class="p">]</span><span class="o">.</span><span class="n">dtypes</span> <span class="o">==</span> <span class="s2">&quot;object&quot;</span><span class="p">:</span>
+        <span class="n">X</span><span class="p">[</span><span class="n">target</span><span class="p">]</span><span class="o">.</span><span class="n">replace</span><span class="p">([</span><span class="s2">&quot;N&quot;</span><span class="p">,</span> <span class="s2">&quot;O&quot;</span><span class="p">],</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="mi">1</span><span class="p">)],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">extreme_values</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">missing</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">enc</span><span class="p">,</span> <span class="n">merged_cat</span><span class="p">,</span> <span class="n">discrete_cat</span><span class="p">,</span> <span class="n">scaler</span><span class="p">,</span> <span class="n">len_col_num</span> <span class="o">=</span> <span class="n">_categorie_data_bin_train</span><span class="p">(</span>
+        <span class="n">X</span><span class="p">,</span>
+        <span class="n">var_cible</span><span class="o">=</span><span class="n">target</span><span class="p">,</span>
+        <span class="n">categorical</span><span class="o">=</span><span class="n">categorical</span><span class="p">,</span>
+        <span class="n">discretize</span><span class="o">=</span><span class="n">discretize</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">X</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">enc</span><span class="p">,</span> <span class="n">scaler</span><span class="p">,</span> <span class="n">merged_cat</span><span class="p">,</span> <span class="n">discrete_cat</span><span class="p">,</span> <span class="n">len_col_num</span>
+
+
+<div class="viewcode-block" id="Processing"><a class="viewcode-back" href="../../_autosummary/lrtree.discretization.html#lrtree.discretization.Processing">[docs]</a><span class="k">class</span> <span class="nc">Processing</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Encapsulates information necessary to discretize / merge and reapply to some new data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">discretize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="n">merge_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target</span> <span class="o">=</span> <span class="n">target</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">enc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaler</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">merged_cat</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">discrete_cat</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="mi">5</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">discretize</span> <span class="o">=</span> <span class="n">discretize</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_cols</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cat_cols</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">merge_threshold</span> <span class="o">=</span> <span class="n">merge_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">X_train</span> <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="Processing.fit"><a class="viewcode-back" href="../../_autosummary/lrtree.discretization.html#lrtree.discretization.Processing.fit">[docs]</a>    <span class="k">def</span> <span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">categorical</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        fits the preprocessing</span>
+
+<span class="sd">        :param pandas.DataFrame X: dataframe to merge and / or discretize (if self.discretize)</span>
+<span class="sd">        :param list categorical: list of categorical features&#39; names</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cat_cols</span> <span class="o">=</span> <span class="n">categorical</span>
+        <span class="c1"># Check if all categorical are inside</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">cat_cols</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cat_cols</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
+                    <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Column </span><span class="si">{</span><span class="n">col</span><span class="si">}</span><span class="s2"> specified in argument &#39;categorical&#39; not present.&quot;</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+            <span class="c1"># Calculate remaining columns</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">col</span> <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span> <span class="k">if</span> <span class="n">col</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">cat_cols</span> <span class="o">+</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">target</span><span class="p">]]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">num_cols</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">to_list</span><span class="p">()</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">target</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_cols</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">num_cols</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">target</span><span class="p">)</span>
+
+        <span class="c1"># Application sur train</span>
+        <span class="n">X</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">labels</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">enc</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaler</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">merged_cat</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">discrete_cat</span><span class="p">,</span> <span class="n">len_col_num</span> <span class="o">=</span> <span class="n">traitement_train</span><span class="p">(</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">X</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target</span><span class="p">,</span> <span class="n">categorical</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cat_cols</span><span class="p">,</span> <span class="n">discretize</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">discretize</span>
+        <span class="p">)</span>
+        <span class="c1"># assert len_col_num == len(self.num_cols)  # nosec</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">X_train</span> <span class="o">=</span> <span class="n">X</span></div>
+
+<div class="viewcode-block" id="Processing.fit_transform"><a class="viewcode-back" href="../../_autosummary/lrtree.discretization.html#lrtree.discretization.Processing.fit_transform">[docs]</a>    <span class="k">def</span> <span class="nf">fit_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">categorical</span><span class="p">:</span> <span class="nb">list</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calls fit and then transform</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">categorical</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">X_train</span></div>
+
+<div class="viewcode-block" id="Processing.transform"><a class="viewcode-back" href="../../_autosummary/lrtree.discretization.html#lrtree.discretization.Processing.transform">[docs]</a>    <span class="k">def</span> <span class="nf">transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Preprocesses validation/test data similar to some previously seen training data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">X_test</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">target</span> <span class="ow">in</span> <span class="n">X_test</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">to_list</span><span class="p">():</span>
+            <span class="k">del</span> <span class="n">X_test</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">target</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">traitement_val</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">X_test</span><span class="p">,</span> <span class="n">enc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">enc</span><span class="p">,</span> <span class="n">scaler</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">scaler</span><span class="p">,</span>
+                              <span class="n">merged_cat</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">merged_cat</span><span class="p">,</span> <span class="n">discret_cat</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">discrete_cat</span><span class="p">,</span>
+                              <span class="n">categorical</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">cat_cols</span><span class="p">,</span> <span class="n">discretize</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">discretize</span><span class="p">)</span></div></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2020, Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
