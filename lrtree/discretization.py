@@ -13,6 +13,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 
+FORMAT = "{:.2e}"
+
 
 def bin_data_cate_train(data: pd.DataFrame, var_cible: str, categorical=None):
     # if categorical is None:
@@ -408,7 +410,7 @@ def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
                     clustered.replace({value1: value2}, inplace=False), pd)
                 # stat chi2, p-value, degree of freedom, expected frequencies
                 g, p, dof, expctd = chi2_contingency(contingency_matrix, lambda_="log-likelihood")
-                reductions[count1, count2] = "{:.2e}".format((1 - g / chi0))
+                reductions[count1, count2] = FORMAT.format((1 - g / chi0))
     return reductions
 
 
@@ -425,9 +427,9 @@ def update_reduction_matrix(df, var, var_predite, matrix, clustered, ind, chi0):
         g, p, dof, expctd = chi2_contingency(contingency_matrix, lambda_="log-likelihood")
         # Fills in (in the good half) the new values
         if count > ind[0]:
-            matrix[ind[0], count] = "{:.2e}".format((1 - g / chi0))
+            matrix[ind[0], count] = FORMAT.format((1 - g / chi0))
         if count < ind[0]:
-            matrix[count, ind[0]] = "{:.2e}".format((1 - g / chi0))
+            matrix[count, ind[0]] = FORMAT.format((1 - g / chi0))
     return matrix
 
 
