@@ -34,6 +34,7 @@ setup(name='lrtree',
       author='Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar',
       author_email='Groupe-recherche-operationnelle.GRO@credit-agricole-sa.fr',
       install_requires=install_requires,
+      extras_require={'scripts': ["matplotlib", "tikzplotlib", "kaggle"]},
       test_suite="pytest-runner",
       test_requires=install_requires_dev,
       classifiers=[
@@ -41,5 +42,6 @@ setup(name='lrtree',
           "Operating System :: OS Independent",
       ],
       entry_points={
-           'console_scripts': ["lrtree-consistency=lrtree._command_line.consistency:main"]}
+           'console_scripts': ["lrtree-consistency=lrtree._command_line.consistency:main",
+                               "lrtree-realdata=lrtree._command_line.realdataopen:main"]}
       )

@@ -1,7 +1,7 @@
 import numpy as np
 
 import lrtree
-from scripts.realdataopen import get_adult_data
+from lrtree._command_line.realdataopen import get_adult_data
 
 
 def test_discretization():

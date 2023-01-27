@@ -13,11 +13,11 @@ from pathlib import Path
 from lrtree import Lrtree
 from lrtree.fit import _fit_parallelized
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+BASE_DIR = os.getcwd()
 logger.remove()
 logger.add(tqdm.write)
 affichage = None  # Affichage de l'arbre obtenu, None, texte ou image
-test = os.environ.get("DEBUG", False)
+test = os.environ.get("DEBUG", "False").lower() in ('true', 't', '1')
 
 if test:
     hyperparameters_to_test = {

@@ -1,41 +1,50 @@
 import os
 import zipfile
-os.environ['LOGURU_LEVEL'] = 'ERROR'
-os.environ['TQDM_DISABLE'] = '1'
-import warnings
+# os.environ['LOGURU_LEVEL'] = 'ERROR'
+# os.environ['TQDM_DISABLE'] = '1'
+import warnings  # noqa: E402
 warnings.filterwarnings("ignore")
-import pandas as pd
-from loguru import logger
-from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import roc_auc_score
-from sklearn.tree import DecisionTreeClassifier
-from tqdm import tqdm
-from typing import Tuple
-from lrtree.discretization import Processing
-from lrtree.fit import _fit_parallelized
-from operator import itemgetter
-import numpy as np
-from sklearn.linear_model import LogisticRegressionCV
-from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GridSearchCV
-
-
-if False:
-    from kaggle.api import KaggleApi
-
-    api = KaggleApi()
-    api.authenticate()
+import pandas as pd  # noqa: E402
+from loguru import logger  # noqa: E402
+from sklearn.ensemble import GradientBoostingClassifier  # noqa: E402
+from sklearn.ensemble import RandomForestClassifier  # noqa: E402
+from sklearn.metrics import roc_auc_score  # noqa: E402
+from sklearn.tree import DecisionTreeClassifier  # noqa: E402
+from tqdm import tqdm  # noqa: E402
+from typing import Tuple  # noqa: E402
+from lrtree.discretization import Processing  # noqa: E402
+from lrtree.fit import _fit_parallelized  # noqa: E402
+from operator import itemgetter  # noqa: E402
+import numpy as np  # noqa: E402
+from sklearn.linear_model import LogisticRegressionCV  # noqa: E402
+from sklearn.pipeline import make_pipeline  # noqa: E402
+from sklearn.preprocessing import StandardScaler  # noqa: E402
+from sklearn.model_selection import GridSearchCV  # noqa: E402
 
 
 targets = {"adult": "Target", "german": "Target", "fraud": "Class"}
 
 
+def main():
+    results_df = []
+    for data in ["german", "adult", "fraud"]:
+        results_exp = []
+        for seed in tqdm(range(0, 600, 30), desc="Seeds"):
+            X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical = get_data(data, seed)
+            lrtree_test = run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical)
+            reglog_test, tree_test, boost_test, forest_test = run_other_models(
+                X_train, X_val, X_test, labels_train, labels_val, labels_test)
+            results_exp.append([data, lrtree_test, reglog_test, tree_test, boost_test, forest_test])
+        results_df.append(pd.DataFrame(results_exp, columns=[
+            "Dataset", "[MODEL]", "Logistic regression", "Decision tree", "Boosting", "Random Forest"]).agg(
+            ["mean", "std"]))
+    # TODO: add changes from workstation
+
+
 def get_from_uci(train: str, test: str = None, **kwargs) -> (pd.DataFrame, pd.DataFrame):
     filename_train = train.split('/')[-1]
     if not os.path.isfile(filename_train):
-        original_train = pd.read_csv(train,  **kwargs)
+        original_train = pd.read_csv(train, **kwargs)
         original_train.to_pickle(filename_train)
     else:
         original_train = pd.read_pickle(filename_train)
@@ -142,6 +151,9 @@ def get_fraud_data(target: str, seed: int):
     :return: train and test sets (with labels), train and test labels, list of categorical features' names
     :rtype: (pandas.DataFrame, pandas.DataFrame, pandas.Series, pandas.Series, list)
     """
+    from kaggle.api import KaggleApi  # noqa: E402
+    api = KaggleApi()
+    api.authenticate()
     categorical = None
     api.dataset_download_cli("mlg-ulb/creditcardfraud", force=False)  # for some reason, unzip redownloads every time
     effective_path = api.get_default_download_dir(
@@ -209,6 +221,7 @@ def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: 
 
 
 def run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical):
+    results_lrtree = []
     for class_num in range(5, 6):
         for data_treatment in [False]:
             for leaves_as_segment in [True]:
@@ -316,15 +329,4 @@ def run_other_models(X_train, X_val, X_test, labels_train, labels_val, labels_te
 
 
 if __name__ == "__main__":
-    results_df = []
-    for data in ["german"]:
-        results_exp = []
-        for seed in tqdm(range(0, 600, 30), desc="Seeds"):
-            results_lrtree = []
-            X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical = get_data(data, seed)
-            lrtree_test = run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical)
-            reglog_test, tree_test, boost_test, forest_test = run_other_models(
-                X_train, X_val, X_test, labels_train, labels_val, labels_test)
-            results_exp.append([lrtree_test, reglog_test, tree_test, boost_test, forest_test])
-        results_df.append(pd.DataFrame(results_exp, columns=["[MODEL]", "Logistic regression", "Decision tree",
-                                                             "Boosting", "Random Forest"]).agg(["mean", "std"]))
+    main()

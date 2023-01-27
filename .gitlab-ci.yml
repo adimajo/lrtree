@@ -50,8 +50,7 @@ lint:
   <<: *common_python
   script:
     - pip install flake8
-    - flake8 lrtree --count --select=E9,F63,F7,F82 --show-source --statistics
-    - flake8 --ignore=W504 lrtree --count --max-complexity=15 --max-line-length=120 --statistics
+    - flake8 --ignore=W504 lrtree --count --show-source --max-complexity=15 --max-line-length=120 --statistics
   only:
     refs:
       - branches

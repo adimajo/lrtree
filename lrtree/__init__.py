@@ -6,7 +6,7 @@
     NotFittedError
     _check_input_args
 """
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 import numpy as np
 from loguru import logger
