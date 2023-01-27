@@ -70,8 +70,6 @@ jobs:
         git checkout master
     - name: Build and check package
       run: |
-        pipenv --version
-        pipenv run pipenv_to_requirements
         pipenv run pip install --upgrade keyring keyrings.alt
         pipenv run python setup.py sdist bdist_wheel
         pipenv run twine check dist/*
