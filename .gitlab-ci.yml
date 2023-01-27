@@ -16,26 +16,6 @@ variables:
   tags:
   - kubernetes
 
-.common_deploy_deb: &common_deploy_deb
-  before_script:
-    # Install ssh-agent if not already installed, it is required by Docker.
-    # (change apt-get to yum if you use a CentOS-based image)
-    - 'which ssh-agent || ( apt update && apt install -y openssh-client )'
-
-    # Run ssh-agent (inside the build environment)
-    - eval $(ssh-agent -s)
-
-    # Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
-    - echo "$GITLAB_SSH_KEY" |  tr -d ' ' | base64 -d | ssh-add -
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - ssh-keyscan gitlab.ca.cib >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
-    - apt update
-    - apt install -y git
-    - git config --global user.name "$GITLAB_USER_NAME"
-    - git config --global user.email "$GITLAB_USER_EMAIL"
-
 .global_cache: &global_cache
   cache:
     paths:
@@ -90,7 +70,7 @@ install:
   <<: *common_tag
   <<: *common_python
   script:
-    - pip install "pipenv<=2022.10.4"
+    - pip install "pipenv<2022.10.4"
     - pipenv install
     - pipenv run python -c 'import lrtree; print(lrtree.__version__)'  # otherwise next line doesn't error
     - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'` >> build.env
@@ -107,7 +87,7 @@ test:
   <<: *common_tag
   <<: *common_python
   script:
-    - pip install "pipenv<=2022.10.4"
+    - pip install "pipenv<2022.10.4"
     - pipenv install -d --skip-lock
     - pipenv run coverage run --source lrtree/ -m pytest
     - pipenv run coverage report
@@ -127,7 +107,7 @@ security:
   <<: *common_python
   <<: *common_tag
   script:
-    - pip install "pipenv<=2022.10.4"
+    - pip install "pipenv<2022.10.4"
     - pipenv run bandit -r lrtree
 
 quality_check:
@@ -159,7 +139,7 @@ document:
   <<: *common_tag
   script:
     - . ./build.env
-    - pip install "pipenv<=2022.10.4"
+    - pip install "pipenv<2022.10.4"
     - apt update
     - apt install -y make libpq-dev gcc git
     - cd docs
@@ -204,7 +184,7 @@ deploy:
   script:
     - apt-get update
     - apt-get install -y wget
-    - pip install "pipenv<=2022.10.4"
+    - pip install "pipenv<2022.10.4"
     - pipenv run pipenv_to_requirements
     - pipenv run python3 setup.py sdist bdist_wheel
     - python3 setup.py sdist bdist_wheel
