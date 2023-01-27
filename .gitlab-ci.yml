@@ -108,8 +108,6 @@ test:
   <<: *common_python
   script:
     - pipenv install -d --skip-lock
-    - mkdir ~/.kaggle
-    - touch ~/.kaggle/kaggle.kson
     - pipenv run coverage run --source lrtree/ -m pytest
     - pipenv run coverage report
     - pipenv run coverage xml

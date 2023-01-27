@@ -5,7 +5,6 @@ os.environ['TQDM_DISABLE'] = '1'
 import warnings
 warnings.filterwarnings("ignore")
 import pandas as pd
-from kaggle.api import KaggleApi
 from loguru import logger
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import RandomForestClassifier
@@ -24,6 +23,8 @@ from sklearn.model_selection import GridSearchCV
 
 
 if False:
+    from kaggle.api import KaggleApi
+
     api = KaggleApi()
     api.authenticate()
 
