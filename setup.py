@@ -40,7 +40,7 @@ setup(name='lrtree',
           "Programming Language :: Python :: 3",
           "Operating System :: OS Independent",
       ],
-      scripts=["scripts/fit_data_reelles.py",
-               "scripts/traitement_data.py",
-               "scripts/validation.py"]
+      # scripts=["scripts/fit_data_reelles.py",
+      #          "scripts/traitement_data.py",
+      #          "scripts/validation.py"]
       )
