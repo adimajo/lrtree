@@ -1,0 +1,55 @@
+lrtree.discretization
+=====================
+
+.. automodule:: lrtree.discretization
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      apply_discretization
+      bin_data_cate_test
+      bin_data_cate_train
+      categorie_data_bin_train_test
+      categorie_data_labels
+      chi2_test
+      create_reduction_matrix
+      cut_points
+      discretize_feature
+      entropy
+      extreme_values
+      find_cut_index
+      get_index
+      green_clust
+      grouping
+      part
+      stopping_criterion
+      traitement_train
+      traitement_train_val
+      traitement_val
+      update_reduction_matrix
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      Processing
+   
+   
+
+   
+   
+   
+
+
+

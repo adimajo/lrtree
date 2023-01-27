@@ -13,17 +13,12 @@ lrtree.fit
 
    .. autosummary::
    
+      find_leaves
       fit
    
    
 
    
-   
-   .. rubric:: Classes
-
-   .. autosummary::
-   
-      OneClassReg
    
    
 

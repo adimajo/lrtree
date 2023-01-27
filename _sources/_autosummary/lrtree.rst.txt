@@ -39,7 +39,9 @@
    :toctree:
    :recursive:
 
+   lrtree.discretization
    lrtree.fit
    lrtree.generate_data
+   lrtree.logreg
    lrtree.predict
 

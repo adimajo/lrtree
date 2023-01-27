@@ -1,31 +1,70 @@
+
+
 <!DOCTYPE html>
 <html class="writer-html5" lang="en" >
 <head>
   <meta charset="utf-8" />
+  
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>lrtree &mdash; lrtree 1.0.0 documentation</title>
-      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  
+  <title>lrtree &mdash; lrtree 1.0.1 documentation</title>
+  
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+
+  
+  
+
+  
+  
+
+  
+
+  
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
   <![endif]-->
   
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
         <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
-        <script src="../_static/jquery.js"></script>
-        <script src="../_static/underscore.js"></script>
         <script src="../_static/doctools.js"></script>
-    <script src="../_static/js/theme.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" /> 
 </head>
 
-<body class="wy-body-for-nav"> 
+<body class="wy-body-for-nav">
+
+   
   <div class="wy-grid-for-nav">
+    
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
+          
+
+          
             <a href="../index.html" class="icon icon-home"> lrtree
+          
+
+          
           </a>
+
+          
+            
+            
+          
+
+          
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
     <input type="text" name="q" placeholder="Search docs" />
@@ -33,61 +72,122 @@
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+
+          
+        </div>
+
+        
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
               <ul>
 <li class="toctree-l1"><a class="reference internal" href="../_autosummary/lrtree.html">lrtree</a></li>
 </ul>
 
+            
+          
         </div>
+        
       </div>
     </nav>
 
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
           <a href="../index.html">lrtree</a>
+        
       </nav>
 
+
       <div class="wy-nav-content">
+        
         <div class="rst-content">
-          <div role="navigation" aria-label="Page navigation">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
   <ul class="wy-breadcrumbs">
+    
       <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+        
           <li><a href="index.html">Module code</a> &raquo;</li>
+        
       <li>lrtree</li>
+    
+    
       <li class="wy-breadcrumbs-aside">
+        
       </li>
+    
   </ul>
+
+  
   <hr/>
 </div>
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
-             
+            
   <h1>Source code for lrtree</h1><div class="highlight"><pre>
 <span></span><span class="sd">&quot;&quot;&quot;This module is dedicated to logistic regression trees</span>
 
-<span class="sd">.. autosummary::</span>
-<span class="sd">    :toctree:</span>
+<span class="sd">.. autoclass:: Lrtree</span>
+<span class="sd">   :members:</span>
 
-<span class="sd">    Lrtree</span>
+<span class="sd">    NotFittedError</span>
+<span class="sd">    _check_input_args</span>
 <span class="sd">&quot;&quot;&quot;</span>
-<span class="n">__version__</span> <span class="o">=</span> <span class="s2">&quot;1.0.0&quot;</span>
+<span class="n">__version__</span> <span class="o">=</span> <span class="s2">&quot;1.0.1&quot;</span>
 
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">from</span> <span class="nn">loguru</span> <span class="kn">import</span> <span class="n">logger</span>
 <span class="kn">import</span> <span class="nn">sklearn</span> <span class="k">as</span> <span class="nn">sk</span>
 
+<span class="n">LOW_VARIATION</span> <span class="o">=</span> <span class="s2">&quot;low variation&quot;</span>
+<span class="n">LOW_IMPROVEMENT</span> <span class="o">=</span> <span class="s2">&quot;low improvement&quot;</span>
+<span class="n">CHANGED_SEGMENTS</span> <span class="o">=</span> <span class="s2">&quot;changed segments&quot;</span>
+
 
 <span class="k">class</span> <span class="nc">NotFittedError</span><span class="p">(</span><span class="n">sk</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">NotFittedError</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;Exception class to raise if estimator is used before fitting.</span>
-<span class="sd">    This class inherits from both NotFittedError from sklearn which</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Exception class to raise if estimator is used before fitting.</span>
+<span class="sd">    This class inherits from NotFittedError from sklearn which</span>
 <span class="sd">    itself inherits from ValueError and AttributeError to help with</span>
 <span class="sd">    exception handling and backward compatibility.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
 
 <span class="k">def</span> <span class="nf">_check_input_args</span><span class="p">(</span><span class="n">algo</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">validation</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">test</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">ratios</span><span class="p">,</span> <span class="n">criterion</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
-    <span class="sd">&quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Checks input arguments :code:`algo`, :code:`validation`, :code:`test`, :code:`ratios` and :code:`criterion`</span>
+
+<span class="sd">    :param str algo: either &quot;sem&quot; or &quot;em&quot;</span>
+<span class="sd">    :param bool validation: whether to use validation set</span>
+<span class="sd">    :param bool test: whether to use test set</span>
+<span class="sd">    :param tuple ratios: proportion of validation / test samples</span>
+<span class="sd">    :param str criterion: one of &quot;gini&quot;, &quot;bic&quot;, &quot;aic&quot;</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># The algorithm should be one the ones in the list</span>
     <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">algo</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">str</span><span class="p">:</span>
@@ -151,48 +251,73 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
 
-<div class="viewcode-block" id="Lrtree"><a class="viewcode-back" href="../_autosummary/lrtree.Lrtree.html#lrtree.Lrtree">[docs]</a><span class="k">class</span> <span class="nc">Lrtree</span><span class="p">:</span>
-    <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    The class implements a supervised method based in logistic trees</span>
+<div class="viewcode-block" id="Lrtree"><a class="viewcode-back" href="../_autosummary/lrtree.html#lrtree.Lrtree">[docs]</a><span class="k">class</span> <span class="nc">Lrtree</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    The class implements a supervised method based in logistic trees. Its attributes:</span>
 
 <span class="sd">    .. attribute:: test</span>
-<span class="sd">        Boolean (T/F) specifying if a test set is required.</span>
-<span class="sd">        If True, the provided data is split to provide 20% of observations in a test set</span>
-<span class="sd">        and the reported performance is the Gini index on test set.</span>
-<span class="sd">        :type: bool</span>
-<span class="sd">    .. attribute:: validation</span>
-<span class="sd">        Boolean (T/F) specifying if a validation set is required.</span>
-<span class="sd">        If True, the provided data is split to provide 20% of observations in a validation set</span>
-<span class="sd">        and the reported performance is the Gini index on the validation set (if no test=False).</span>
-<span class="sd">        The quality of the model at each step is evaluated using the Gini index on the</span>
-<span class="sd">        validation set, so criterion must be set to &quot;gini&quot;.</span>
-<span class="sd">        :type: bool</span>
-<span class="sd">    .. attribute:: criterion</span>
-<span class="sd">        The criterion to be used to assess the goodness-of-fit of the model: \</span>
-<span class="sd">        &quot;bic&quot; or &quot;aic&quot; if no validation set, else &quot;gini&quot;.</span>
-<span class="sd">        :type: str</span>
-<span class="sd">    .. attribute:: max_iter</span>
-<span class="sd">        Number of MCMC steps to perform. The more the better, but it may be more intelligent to use</span>
-<span class="sd">        several MCMCs. Computation time can increase dramatically.</span>
-<span class="sd">        :type: int</span>
-<span class="sd">    .. attribute:: num_class</span>
-<span class="sd">        Number of initial segments.</span>
-<span class="sd">        :type: int</span>
-<span class="sd">    .. attribute:: criterion_iter</span>
-<span class="sd">        The value of the criterion wished to be optimized over the iterations.</span>
-<span class="sd">        :type: list</span>
-<span class="sd">    .. attribute:: best_link</span>
-<span class="sd">        The best decision tree.</span>
-<span class="sd">        :type: sklearn.tree.DecisionTreeClassifier</span>
-<span class="sd">    .. attribute:: best_reglog:</span>
-<span class="sd">        The list of the best logistic regression on each segment (found with best_link).</span>
-<span class="sd">        :type: list</span>
-<span class="sd">    .. attribute:: ratios</span>
-<span class="sd">        The float ratio values for splitting of a dataset in test, validation.</span>
-<span class="sd">        :type: tuple</span>
-<span class="sd">    &quot;&quot;&quot;</span>
 
-<div class="viewcode-block" id="Lrtree.__init__"><a class="viewcode-back" href="../_autosummary/lrtree.Lrtree.html#lrtree.Lrtree.__init__">[docs]</a>    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
+<span class="sd">    :type: bool</span>
+
+<span class="sd">    Boolean (T/F) specifying if a test set is required.</span>
+<span class="sd">    If True, the provided data is split to provide 20% of observations in a test set</span>
+<span class="sd">    and the reported performance is the Gini index on test set.</span>
+
+<span class="sd">    .. attribute:: validation</span>
+
+<span class="sd">    :type: bool</span>
+
+<span class="sd">    Boolean (T/F) specifying if a validation set is required.</span>
+<span class="sd">    If True, the provided data is split to provide 20% of observations in a validation set</span>
+<span class="sd">    and the reported performance is the Gini index on the validation set (if no test=False).</span>
+<span class="sd">    The quality of the model at each step is evaluated using the Gini index on the</span>
+<span class="sd">    validation set, so criterion must be set to &quot;gini&quot;.</span>
+
+<span class="sd">    .. attribute:: criterion</span>
+
+<span class="sd">    :type: str</span>
+
+<span class="sd">    The criterion to be used to assess the goodness-of-fit of the model:</span>
+<span class="sd">    &quot;bic&quot; or &quot;aic&quot; if no validation set, else &quot;gini&quot;.</span>
+
+<span class="sd">    .. attribute:: max_iter</span>
+
+<span class="sd">    :type: int</span>
+
+<span class="sd">    Number of MCMC steps to perform. The more the better, but it may be more intelligent to use</span>
+<span class="sd">    several MCMCs. Computation time can increase dramatically.</span>
+
+<span class="sd">    .. attribute:: num_clas</span>
+
+<span class="sd">    :type: int</span>
+
+<span class="sd">    Number of initial segments.</span>
+
+<span class="sd">    .. attribute:: criterion_iter</span>
+
+<span class="sd">    :type: list</span>
+
+<span class="sd">    The value of the criterion wished to be optimized over the iterations.</span>
+
+<span class="sd">    .. attribute:: best_link</span>
+
+<span class="sd">    :type: sklearn.tree.DecisionTreeClassifier</span>
+
+<span class="sd">    The best decision tree.</span>
+
+<span class="sd">    .. attribute:: best_reglog:</span>
+
+<span class="sd">    :type: list</span>
+
+<span class="sd">    The list of the best logistic regression on each segment (found with best_link).</span>
+
+<span class="sd">    .. attribute:: ratios</span>
+
+<span class="sd">    :type: tuple</span>
+
+<span class="sd">    The float ratio values for splitting of a dataset in test, validation.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span>
                  <span class="n">algo</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;SEM&#39;</span><span class="p">,</span>
                  <span class="n">test</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
                  <span class="n">validation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -200,40 +325,75 @@
                  <span class="n">ratios</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.7</span><span class="p">,),</span>
                  <span class="n">class_num</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span>
                  <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
-                 <span class="n">data_treatment</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;</span>
+                 <span class="n">data_treatment</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+                 <span class="n">discretization</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+                 <span class="n">leaves_as_segment</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+                 <span class="n">early_stopping</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="n">burn_in</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Initializes self by checking if its arguments are appropriately specified.</span>
 
-<span class="sd">            :param str algo:        The algorithm to be used to fit the Lrtree: &quot;SEM&quot; for a stochastic approach or</span>
-<span class="sd">                                    &quot;EM&quot; for a non stochastic expectation/maximization algorithm.</span>
-<span class="sd">            :param bool test:       Boolean specifying if a test set is required.</span>
-<span class="sd">                                    If True, the provided data is split to provide 20%</span>
-<span class="sd">                                    of observations in a test set and the reported</span>
-<span class="sd">                                    performance is the Gini index on test set.</span>
-<span class="sd">            :param bool validation: Boolean (T/F) specifying if a validation set is</span>
-<span class="sd">                                    required. If True, the provided data is split to</span>
-<span class="sd">                                    provide 20% of observations in a validation set</span>
-<span class="sd">                                    and the reported performance is the Gini index on</span>
-<span class="sd">                                    the validation set (if no test=False). The quality</span>
-<span class="sd">                                    of the model at each step is evaluated</span>
-<span class="sd">                                    using the Gini index on the validation set, so</span>
-<span class="sd">                                    criterion must be set to &quot;gini&quot;.</span>
-<span class="sd">            :param str criterion:   The criterion to be used to assess the</span>
-<span class="sd">                                    goodness-of-fit of the model: &quot;bic&quot; or</span>
-<span class="sd">                                    &quot;aic&quot; if no validation set, else &quot;gini&quot;.</span>
-<span class="sd">            :param int max_iter:    Number of MCMC steps to perform. The more the</span>
-<span class="sd">                                    better, but it may be more intelligent to use</span>
-<span class="sd">                                    several MCMCs. Computation time can increase</span>
-<span class="sd">                                    dramatically. Defaults to 100.</span>
-<span class="sd">            :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.</span>
-<span class="sd">                                    Sum of values should be less than 1. Defaults to (0.7, 0.3)</span>
-<span class="sd">            :param int class_num:   Number of initial segments. Defaults to 10.</span>
-<span class="sd">            :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each</span>
-<span class="sd">                                        leaf.</span>
+<span class="sd">        :param str algo:        The algorithm to be used to fit the Lrtree: &quot;SEM&quot; for a stochastic approach or</span>
+<span class="sd">                                &quot;EM&quot; for a non stochastic expectation/maximization algorithm.</span>
+<span class="sd">        :param bool test:       Boolean specifying if a test set is required.</span>
+<span class="sd">                                If True, the provided data is split to provide 20%</span>
+<span class="sd">                                of observations in a test set and the reported</span>
+<span class="sd">                                performance is the Gini index on test set.</span>
+<span class="sd">        :param bool validation: Boolean (T/F) specifying if a validation set is</span>
+<span class="sd">                                required. If True, the provided data is split to</span>
+<span class="sd">                                provide 20% of observations in a validation set</span>
+<span class="sd">                                and the reported performance is the Gini index on</span>
+<span class="sd">                                the validation set (if no test=False). The quality</span>
+<span class="sd">                                of the model at each step is evaluated</span>
+<span class="sd">                                using the Gini index on the validation set, so</span>
+<span class="sd">                                criterion must be set to &quot;gini&quot;.</span>
+<span class="sd">        :param str criterion:   The criterion to be used to assess the</span>
+<span class="sd">                                goodness-of-fit of the model: &quot;bic&quot; or</span>
+<span class="sd">                                &quot;aic&quot; if no validation set, else &quot;gini&quot;.</span>
+<span class="sd">        :param int max_iter:    Number of MCMC steps to perform. The more the</span>
+<span class="sd">                                better, but it may be more intelligent to use</span>
+<span class="sd">                                several MCMCs. Computation time can increase</span>
+<span class="sd">                                dramatically. Defaults to 100.</span>
+<span class="sd">        :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.</span>
+<span class="sd">                                Sum of values should be less than 1. Defaults to (0.7, 0.3)</span>
+<span class="sd">        :param int class_num:   Number of initial segments. Defaults to 10.</span>
+<span class="sd">        :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each</span>
+<span class="sd">                                    leaf.</span>
+<span class="sd">        :param bool leaves_as_segment: MAP or leaves-as-segment.</span>
+<span class="sd">        :param early_stopping: bool (default: False or list of early stopping rules: can be one or several</span>
+<span class="sd">            from &quot;low improvement&quot;, &quot;low variation&quot;, &quot;changed segments&quot;).</span>
+<span class="sd">        :param int burn_in: number of iterations to &quot;burn&quot;.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">_check_input_args</span><span class="p">(</span><span class="n">algo</span><span class="p">,</span> <span class="n">validation</span><span class="p">,</span> <span class="n">test</span><span class="p">,</span> <span class="n">ratios</span><span class="p">,</span> <span class="n">criterion</span><span class="p">)</span>
+
+        <span class="c1"># Fit-specific</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tree_depth</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tol</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_impurity_decrease</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">optimal_size</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">solver</span> <span class="o">=</span> <span class="kc">None</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">criterion</span> <span class="o">=</span> <span class="n">criterion</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">algo</span> <span class="o">=</span> <span class="n">algo</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">burn_in</span> <span class="o">=</span> <span class="n">burn_in</span>
+        <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Unrecognized early stopping rule, must be in [</span><span class="si">{</span><span class="p">[</span><span class="n">LOW_IMPROVEMENT</span><span class="p">,</span><span class="w"> </span><span class="n">LOW_VARIATION</span><span class="p">,</span><span class="w"> </span><span class="n">CHANGED_SEGMENTS</span><span class="p">]</span><span class="si">}</span><span class="s2">].&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">early_stopping</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">early_stopping</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">early_stopping</span> <span class="o">=</span> <span class="p">[</span><span class="n">LOW_IMPROVEMENT</span><span class="p">,</span> <span class="n">LOW_VARIATION</span><span class="p">,</span> <span class="n">CHANGED_SEGMENTS</span><span class="p">]</span> <span class="k">if</span> <span class="n">early_stopping</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">early_stopping</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">early_stopping</span> <span class="o">=</span> <span class="p">[</span><span class="n">string</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">for</span> <span class="n">string</span> <span class="ow">in</span> <span class="n">early_stopping</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">el</span> <span class="ow">in</span> <span class="n">early_stopping</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">el</span> <span class="ow">in</span> <span class="p">[</span><span class="n">LOW_IMPROVEMENT</span><span class="p">,</span> <span class="n">LOW_VARIATION</span><span class="p">,</span> <span class="n">CHANGED_SEGMENTS</span><span class="p">]:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">early_stopping</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">el</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">early_stopping</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">early_stopping</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">early_stopping</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="p">[</span><span class="n">LOW_IMPROVEMENT</span><span class="p">,</span> <span class="n">LOW_VARIATION</span><span class="p">,</span> <span class="n">CHANGED_SEGMENTS</span><span class="p">]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">early_stopping</span> <span class="o">=</span> <span class="p">[</span><span class="n">early_stopping</span><span class="o">.</span><span class="n">lower</span><span class="p">()]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 
         <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span> <span class="ow">and</span> <span class="n">criterion</span> <span class="o">==</span> <span class="s2">&quot;gini&quot;</span><span class="p">:</span>
             <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;Using Gini index on training set might yield an overfitted model.&quot;</span>
@@ -251,6 +411,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">ratios</span> <span class="o">=</span> <span class="n">ratios</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">data_treatment</span> <span class="o">=</span> <span class="n">data_treatment</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">column_names</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">leaves_as_segment</span> <span class="o">=</span> <span class="n">leaves_as_segment</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">discretization</span> <span class="o">=</span> <span class="n">discretization</span>
 
         <span class="c1"># Init data</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">train_rows</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">validate_rows</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">test_rows</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
@@ -261,10 +423,12 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">best_logreg</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">best_criterion</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">criterion_iter</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">best_treatment</span> <span class="o">=</span> <span class="kc">None</span></div>
+        <span class="bp">self</span><span class="o">.</span><span class="n">best_treatment</span> <span class="o">=</span> <span class="kc">None</span>
 
-    <span class="k">def</span> <span class="nf">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="sd">&quot;&quot;&quot;Perform is_fitted validation for estimator.</span>
+    <span class="k">def</span> <span class="nf">_check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform is_fitted validation for estimator.</span>
+
 <span class="sd">        Checks if the estimator is fitted by verifying the presence of</span>
 <span class="sd">        fitted attributes (ending with a trailing underscore) and otherwise</span>
 <span class="sd">        raises a NotFittedError with the given message.</span>
@@ -278,8 +442,8 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">best_link</span><span class="p">,</span> <span class="n">sk</span><span class="o">.</span><span class="n">tree</span><span class="o">.</span><span class="n">DecisionTreeClassifier</span><span class="p">):</span>  <span class="c1"># pragma: no cover</span>
                 <span class="n">sk</span><span class="o">.</span><span class="n">utils</span><span class="o">.</span><span class="n">validation</span><span class="o">.</span><span class="n">check_is_fitted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">best_link</span><span class="p">)</span>
         <span class="k">except</span> <span class="p">(</span><span class="n">sk</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">NotFittedError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="n">NotFittedError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot; If you did call fit, try increasing iter: &quot;</span>
-                                          <span class="s2">&quot;it means it did not find a better solution than the random initialization.&quot;</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="n">NotFittedError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">. If you did call fit, try increasing `iter`: it means it did not find a &quot;</span>
+                                 <span class="sa">f</span><span class="s2">&quot;better solution than the random initialization.&quot;</span><span class="p">)</span>
 
     <span class="c1"># Imported methods</span>
     <span class="kn">from</span> <span class="nn">.fit</span> <span class="kn">import</span> <span class="n">fit</span>
@@ -290,30 +454,46 @@
 </pre></div>
 
            </div>
+           
           </div>
           <footer>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2020, Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar.</p>
-  </div>
+    <p>
+        &#169; Copyright 2020, Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar.
 
-  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    </p>
+  </div>
+    
+    
+    
+    Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    
     <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    provided by <a href="https://readthedocs.org">Read the Docs</a>.
-   
+    
+    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
 </footer>
         </div>
       </div>
+
     </section>
+
   </div>
-  <script>
+  
+
+  <script type="text/javascript">
       jQuery(function () {
           SphinxRtdTheme.Navigation.enable(true);
       });
-  </script> 
+  </script>
+
+  
+  
+    
+   
 
 </body>
 </html>

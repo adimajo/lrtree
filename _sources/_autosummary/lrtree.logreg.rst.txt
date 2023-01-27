@@ -1,0 +1,30 @@
+lrtree.logreg
+=============
+
+.. automodule:: lrtree.logreg
+
+   
+   
+   
+
+   
+   
+   
+
+   
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      LogRegSegment
+      PossiblyOneClassReg
+   
+   
+
+   
+   
+   
+
+
+

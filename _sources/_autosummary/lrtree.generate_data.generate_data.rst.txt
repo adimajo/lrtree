@@ -1,6 +1,0 @@
-lrtree.generate\_data.generate\_data
-====================================
-
-.. currentmodule:: lrtree.generate_data
-
-.. autofunction:: generate_data

@@ -9,12 +9,6 @@ lrtree.generate\_data
 
    
    
-   .. rubric:: Functions
-
-   .. autosummary::
-   
-      generate_data
-   
    
 
    
