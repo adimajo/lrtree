@@ -1,7 +1,7 @@
 [![PyPI version](https://badge.fury.io/py/lrtree.svg)](https://badge.fury.io/py/lrtree)
 [![PyPI pyversions](https://img.shields.io/pypi/pyversions/lrtree.svg)](https://pypi.python.org/pypi/lrtree/)
 [![PyPi Downloads](https://img.shields.io/pypi/dm/lrtree)](https://img.shields.io/pypi/dm/lrtree)
-[![Build Status](https://travis-ci.org/adimajo/lrtree.svg?branch=master)](https://travis-ci.org/adimajo/lrtree)
+[![Build Status](https://app.travis-ci.com/adimajo/lrtree.svg?branch=master)](https://app.travis-ci.com/adimajo/lrtree)
 ![Python package](https://github.com/adimajo/lrtree/workflows/Python%20package/badge.svg)
 [![codecov](https://codecov.io/gh/adimajo/lrtree/branch/master/graph/badge.svg)](https://codecov.io/gh/adimajo/lrtree)
 

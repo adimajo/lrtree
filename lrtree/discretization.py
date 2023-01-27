@@ -1,3 +1,9 @@
+"""
+implements data preprocessing (merging and discretization)
+
+.. autoclass:: Processing
+   :members:
+"""
 import itertools
 from bisect import bisect_right
 from copy import deepcopy
@@ -767,6 +773,9 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
 
 
 class Processing:
+    """
+    Encapsulates information necessary to discretize / merge and reapply to some new data
+    """
     def __init__(self, target: str, discretize: bool = False, merge_threshold: float = 0.2):
         self.target = target
         self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat = [None] * 5
@@ -777,6 +786,12 @@ class Processing:
         self.X_train = None
 
     def fit(self, X: pd.DataFrame, categorical: list):
+        """
+        fits the preprocessing
+
+        :param pandas.DataFrame X: dataframe to merge and / or discretize (if self.discretize)
+        :param list categorical: list of categorical features' names
+        """
         self.cat_cols = categorical
         # Check if all categorical are inside
         if self.cat_cols:
@@ -800,10 +815,16 @@ class Processing:
         self.X_train = X
 
     def fit_transform(self, X: pd.DataFrame, categorical: list):
+        """
+        Calls fit and then transform
+        """
         self.fit(X, categorical)
         return self.X_train
 
     def transform(self, X: pd.DataFrame):
+        """
+        Preprocesses validation/test data similar to some previously seen training data
+        """
         X_test = X.copy()
         if self.target in X_test.columns.to_list():
             del X_test[self.target]

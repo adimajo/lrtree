@@ -225,17 +225,10 @@ promote_stable:
     IMAGE: lrtree
   script:
     - . ./build.env
-#    - apk update
-#    - apk add --no-cache python3 py3-pip
     - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
-    - jfrog config add rt-server --artifactory-url=https://${ARTI_REGISTRY} --user=${ARTI_USER} --password=${ARTI_PASSWORD} --interactive=false
+    - jfrog config add rt-server --artifactory-url=https://${ARTI_REGISTRY}/artifactory --user=${ARTI_USER} --password=${ARTI_PASSWORD} --interactive=false
     - jfrog config use rt-server
-    - jfrog rt ping
     - jfrog rt pip-config --server-id-resolve rt-server --repo-resolve ${TARGET_REPO}
     - if [[ $(jfrog rt u dist/ ${TARGET_REPO}/${IMAGE}/${APPLICATION_TAG_VERSION}/ --build-name=${IMAGE} --build-number=${APPLICATION_TAG_VERSION} --module=${IMAGE} | jq --raw-output '.status') = "success" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
-#    - which python3
-#    - ln -s $(which python3) /usr/bin/python
-#    - CURL_CA_BUNDLE="" JFROG_CLI_LOG_LEVEL=DEBUG jfrog rt pip-install ${IMAGE}
-#    - pip show ${IMAGE}
   only:
    - master

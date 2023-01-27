@@ -106,12 +106,12 @@ def main():
                     n_samples = hyperparameter if hyperparameter_to_test == "#samples" else 6000
                     n_iter = hyperparameter if hyperparameter_to_test == "#iterations" else 100
                     n_init = hyperparameter if hyperparameter_to_test == "#chains" else 5
-                    X, y, theta, BIC_oracle = Lrtree.generate_data(n_samples, 3, seed=seed)
+                    X, y, theta, bic_oracle = Lrtree.generate_data(n_samples, 3, seed=seed)
 
                     # criteria, formes, arbres, splits1, splits2, thetas = [], [], [], [], [], []
                     criteria, formes, arbres, splits1, splits2 = [], [], [], [], []
 
-                    for k in tqdm(range(n_experiments), leave=False, desc="Experiments"):
+                    for _ in tqdm(range(n_experiments), leave=False, desc="Experiments"):
                         criterion, forme, arbre, split1, split2, theta_model = one_experiment(X, y, n_init, n_iter,
                                                                                               leaves_as_segment)
                         criteria.append(criterion)
@@ -121,7 +121,7 @@ def main():
                         splits2.append(split2)
 
                     results[leaves_as_segment][hyperparameter_to_test].loc[hyperparameter] = [
-                        BIC_oracle,
+                        bic_oracle,
                         -np.mean(criteria), np.mean(formes), np.mean(arbres),
                         np.std(criteria), np.std(formes), np.std(arbres)]
 
