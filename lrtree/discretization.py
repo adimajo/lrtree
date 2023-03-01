@@ -1,3 +1,9 @@
+"""
+implements data preprocessing (merging and discretization)
+
+.. autoclass:: Processing
+   :members:
+"""
 import itertools
 from bisect import bisect_right
 from copy import deepcopy
@@ -12,6 +18,8 @@ from sklearn import metrics
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
+
+FORMAT = "{:.2e}"
 
 
 def bin_data_cate_train(data: pd.DataFrame, var_cible: str, categorical=None):
@@ -379,7 +387,8 @@ def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler:
                 X_val = apply_discretization(X_val, column, discret_cat[column])
 
     if to_change:
-        X_val_cat = enc.transform(X_val[to_change])
+        assert set(enc.feature_names_in_) == set(to_change)  # nosec
+        X_val_cat = enc.transform(X_val[enc.feature_names_in_])
     X_val_cat = pd.DataFrame(X_val_cat)
 
     X_val_num = X_val.drop(to_change, axis=1)
@@ -387,13 +396,14 @@ def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler:
         col = X_val_num[column]
         if col.dtypes not in ("int32", "int64", "float32", "float64"):
             X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
-    X_val_num_transformed = scaler.transform(X_val_num)
-
     # Need to reset the index for the concat to work well (when not same index)
     X_val_cat = X_val_cat.reset_index(drop=True)
-    # X_val_num = X_val_num.reset_index(drop=True)
-    X_test = pd.concat([pd.DataFrame(X_val_num_transformed), X_val_cat], axis=1, ignore_index=True)
-    return X_test
+    if not X_val_num.empty:
+        X_val_num_transformed = scaler.transform(X_val_num)
+        X_test = pd.concat([pd.DataFrame(X_val_num_transformed), X_val_cat], axis=1, ignore_index=True)
+        return X_test
+    else:
+        return X_val_cat
 
 
 def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
@@ -408,7 +418,7 @@ def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
                     clustered.replace({value1: value2}, inplace=False), pd)
                 # stat chi2, p-value, degree of freedom, expected frequencies
                 g, p, dof, expctd = chi2_contingency(contingency_matrix, lambda_="log-likelihood")
-                reductions[count1, count2] = "{:.2e}".format((1 - g / chi0))
+                reductions[count1, count2] = FORMAT.format((1 - g / chi0))
     return reductions
 
 
@@ -425,9 +435,9 @@ def update_reduction_matrix(df, var, var_predite, matrix, clustered, ind, chi0):
         g, p, dof, expctd = chi2_contingency(contingency_matrix, lambda_="log-likelihood")
         # Fills in (in the good half) the new values
         if count > ind[0]:
-            matrix[ind[0], count] = "{:.2e}".format((1 - g / chi0))
+            matrix[ind[0], count] = FORMAT.format((1 - g / chi0))
         if count < ind[0]:
-            matrix[count, ind[0]] = "{:.2e}".format((1 - g / chi0))
+            matrix[count, ind[0]] = FORMAT.format((1 - g / chi0))
     return matrix
 
 
@@ -724,18 +734,20 @@ def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScale
         Merged categories for each column
     :param dict discret_cat:
         Binning for the discretisation for each column
+    :param list categorical:
+        Names for categorical features
     :param bool discretize:
         Whether numerical features were discretized
-    :return: les données traitées
+    :return: preprocessed validation data
     :rtype: pandas.DataFrame
     """
     X_val = data.copy()
     if "Defaut_12_Mois_contagion" in X_val.columns:
         X_val.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
     X_val = extreme_values(X_val, missing=False)
-    X_val = _categorie_data_bin_test(X_val, enc, scaler,
-                                     merged_cat, discret_cat,
-                                     categorical, discretize)
+    X_val = _categorie_data_bin_test(data_val=X_val, enc=enc, scaler=scaler,
+                                     merged_cat=merged_cat, discret_cat=discret_cat,
+                                     categorical=categorical, discretize=discretize)
     return X_val
 
 
@@ -766,6 +778,9 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
 
 
 class Processing:
+    """
+    Encapsulates information necessary to discretize / merge and reapply to some new data
+    """
     def __init__(self, target: str, discretize: bool = False, group: bool = False,
                  merge_threshold: float = 0.2):
         self.target = target
@@ -778,6 +793,12 @@ class Processing:
         self.X_train = None
 
     def fit(self, X: pd.DataFrame, categorical: list):
+        """
+        fits the preprocessing
+
+        :param pandas.DataFrame X: dataframe to merge and / or discretize (if self.discretize)
+        :param list categorical: list of categorical features' names
+        """
         self.cat_cols = categorical
         # Check if all categorical are inside
         if self.cat_cols:
@@ -797,14 +818,20 @@ class Processing:
         X, self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat, len_col_num = traitement_train(
             data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize, group=self.group
         )
-        assert len_col_num == len(self.num_cols)  # nosec
+        # assert len_col_num == len(self.num_cols)  # nosec
         self.X_train = X
 
     def fit_transform(self, X: pd.DataFrame, categorical: list):
+        """
+        Calls fit and then transform
+        """
         self.fit(X, categorical)
         return self.X_train
 
     def transform(self, X: pd.DataFrame):
+        """
+        Preprocesses validation/test data similar to some previously seen training data
+        """
         X_test = X.copy()
         if self.target in X_test.columns.to_list():
             del X_test[self.target]

@@ -1,6 +1,5 @@
 language: python
 python:
-  - "3.7"
   - "3.8"
   - "3.9"
 install:
@@ -9,14 +8,11 @@ install:
   - pip install codecov --upgrade
   - pipenv install --dev --skip-lock
 script:
-  - pipenv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=tests/conftest.py
-  - pipenv run flake8 . --count --exit-zero --extend-ignore=W503,W50 --max-complexity=10 --max-line-length=120 --statistics --exclude=tests/conftest.py
+  - pipenv run flake8 --ignore=W504 lrtree --count --show-source --max-complexity=15 --max-line-length=120 --statistics
   - pipenv run coverage run --source lrtree/ -m pytest
   - pipenv run coverage xml
 build:
-  - pipenv run pipenv-setup sync --dev
   - pipenv run pip install --upgrade keyring keyrings.alt
-  - pipenv run pipenv_to_requirements
   - python setup.py build sdist bdist_wheel
   - pipenv run twine check dist/*
 

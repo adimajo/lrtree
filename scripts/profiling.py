@@ -4,7 +4,7 @@ import warnings
 
 from lrtree import Lrtree
 
-X, y, theta, BIC_oracle = Lrtree.generate_data(10000, 3, seed=1)
+X, y, theta, bic_oracle = Lrtree.generate_data(10000, 3, seed=1)
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)

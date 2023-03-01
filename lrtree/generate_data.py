@@ -1,11 +1,14 @@
 """
 generate_data module for the Lrtree class: generating some data to test the algorithm on.
 """
+from typing import Tuple
+
 import numpy as np
 
 
 @staticmethod
-def generate_data(n: int, d: int, seed=None, theta: np.ndarray = None):
+def generate_data(n: int, d: int, seed=None, theta: np.ndarray = None) ->\
+        Tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """
     Generates some toy continuous data that gets discretized, and a label
     is drawn from a logistic regression given the discretized features.
@@ -24,7 +27,6 @@ def generate_data(n: int, d: int, seed=None, theta: np.ndarray = None):
         raise ValueError("theta and seed provided, aborting.")
     elif theta is None:
         theta = np.random.normal(0, 5, (4, 2))  # TODO: generalize to more dimensions and leaves
-        # theta = np.array([[3, -9], [-2, 4], [6, 7], [8, -3]])
 
     x = np.array(np.random.normal(0, 1, (n, d)))
     leaf = np.zeros(n)

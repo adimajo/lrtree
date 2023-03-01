@@ -1,6 +1,17 @@
+"""
+implements segment-specific, possibly single-class, logistic regression
+
+.. autoclass:: PossiblyOneClassReg
+   :members:
+
+.. autoclass:: LogRegSegment
+   :members:
+"""
+from __future__ import annotations
 import inspect
 
 import numpy as np
+import pandas as pd
 import sklearn as sk
 from sklearn.preprocessing import OneHotEncoder
 
@@ -17,7 +28,7 @@ class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
         self._single_class_label = None
         self.n_features_in_ = None
 
-    def fit(self, X, y, weights=None):
+    def fit(self, X: np.ndarray | pd.DataFrame, y: np.ndarray, weights: np.ndarray = None):
         """
         Fit the one class regression: put the label of the single class and the number of features
         """
@@ -28,18 +39,26 @@ class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
         else:
             return super().fit(X, y, weights)
 
-    def predict(self, X):
+    def predict(self, X: np.ndarray | pd.DataFrame) -> np.ndarray:
         """
-        Predict the single class
+        Predict the single class if there's only one class, or predicts
+
+        :param numpy.ndarray or pandas.DataFrame X:
+        :returns: column of class prediction
+        :rtype: numpy.ndarray
         """
         if self._single_class_label is not None:
             return np.full(X.shape[0], self._single_class_label)
         else:
             return super().predict(X)
 
-    def predict_proba(self, X):
+    def predict_proba(self, X: np.ndarray | pd.DataFrame):
         """
         Predict the single class with a 1 probability
+
+        :param numpy.ndarray or pandas.DataFrame X:
+        :returns: two columns, one of which full of ones
+        :rtype: numpy.ndarray
         """
         if self._single_class_label is not None:
             if self._single_class_label == 1:
@@ -51,6 +70,10 @@ class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
 
 
 class LogRegSegment(PossiblyOneClassReg):
+    """
+    Logistic Regression for a given segment; fine-tuned PossiblyOneClassReg, itself from sklearn.LogisticRegression,
+    allowing (1) to have only one class and (2) to embed data processing (merging, discretization).
+    """
     def __init__(self, **kwargs):
         super().__init__()
         self.categories = None
@@ -67,6 +90,9 @@ class LogRegSegment(PossiblyOneClassReg):
             self.categorical = None
 
     def fit(self, **kwargs):
+        """
+        Fits the LogRegSegment by preprocessing the data (if need be / asked for) and calling fit on sklearn
+        """
         train_data = kwargs['X']
         train_data['y'] = kwargs['y']
         if self.data_treatment:
@@ -91,7 +117,10 @@ class LogRegSegment(PossiblyOneClassReg):
         kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
         return super().fit(X=train_data, **kwargs_fit)
 
-    def predict(self, X) -> np.ndarray:
+    def predict(self, X: np.ndarray | pd.DataFrame) -> np.ndarray:
+        """
+        Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict on sklearn
+        """
         if self.data_treatment:
             # Applies the data treatment for this leaf
             # X = X.rename(columns=self.column_names)
@@ -104,7 +133,11 @@ class LogRegSegment(PossiblyOneClassReg):
                                          discretize=self.discretization)
         return super().predict(X.to_numpy())
 
-    def predict_proba(self, X) -> np.ndarray:
+    def predict_proba(self, X: np.ndarray | pd.DataFrame) -> np.ndarray:
+        """
+        Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict_proba
+        on sklearn
+        """
         if self.data_treatment:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)

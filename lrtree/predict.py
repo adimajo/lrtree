@@ -4,7 +4,7 @@ Predict, predict_proba and precision methods for the Lrtree class
 import pandas as pd
 import numpy as np
 from copy import deepcopy
-from lrtree.discretization import bin_data_cate_test, _categorie_data_bin_test
+from lrtree.discretization import bin_data_cate_test
 
 
 def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:

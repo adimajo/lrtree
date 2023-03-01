@@ -6,7 +6,7 @@
     NotFittedError
     _check_input_args
 """
-__version__ = "1.0.0"
+__version__ = "1.0.4"
 
 import numpy as np
 from loguru import logger
@@ -97,6 +97,28 @@ def _check_input_args(algo: str, validation: bool, test: bool, ratios, criterion
         raise ValueError(msg)
 
 
+def _set_early_stopping(early_stopping):
+    stopping = []
+    msg = f"Unrecognized early stopping rule, must be in [{[LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]}]."
+    if isinstance(early_stopping, bool):
+        stopping = [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS] if early_stopping else []
+    elif isinstance(early_stopping, list):
+        early_stopping = [string.lower() for string in early_stopping]
+        for el in early_stopping:
+            if el in [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]:
+                stopping.append(el)
+        if not stopping:
+            logger.error(msg)
+            raise ValueError(msg)
+    elif isinstance(early_stopping, str):
+        if early_stopping.lower() in [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]:
+            stopping = [early_stopping.lower()]
+        else:
+            logger.error(msg)
+            raise ValueError(msg)
+    return stopping
+
+
 class Lrtree:
     """
     The class implements a supervised method based in logistic trees. Its attributes:
@@ -180,7 +202,7 @@ class Lrtree:
         Initializes self by checking if its arguments are appropriately specified.
 
         :param str algo:        The algorithm to be used to fit the Lrtree: "SEM" for a stochastic approach or
-                                "EM" for a non stochastic expectation/maximization algorithm.
+                                "EM" for a non-stochastic expectation/maximization algorithm.
         :param bool test:       Boolean specifying if a test set is required.
                                 If True, the provided data is split to provide 20%
                                 of observations in a test set and the reported
@@ -196,15 +218,14 @@ class Lrtree:
         :param str criterion:   The criterion to be used to assess the
                                 goodness-of-fit of the model: "bic" or
                                 "aic" if no validation set, else "gini".
-        :param int max_iter:    Number of MCMC steps to perform. The more the
+        :param int max_iter:    Number of MCMC steps to perform. The more, the
                                 better, but it may be more intelligent to use
                                 several MCMCs. Computation time can increase
                                 dramatically. Defaults to 100.
         :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
                                 Sum of values should be less than 1. Defaults to (0.7, 0.3)
         :param int class_num:   Number of initial segments. Defaults to 10.
-        :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each
-                                    leaf.
+        :param bool data_treatment: Whether we want the data to be discretized/merged categories in each leaf.
         :param bool leaves_as_segment: MAP or leaves-as-segment.
         :param early_stopping: bool (default: False or list of early stopping rules: can be one or several
             from "low improvement", "low variation", "changed segments").
@@ -222,24 +243,7 @@ class Lrtree:
         self.criterion = criterion.lower()
         self.algo = algo.lower()
         self.burn_in = burn_in
-        msg = f"Unrecognized early stopping rule, must be in [{[LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]}]."
-        self.early_stopping = []
-        if isinstance(early_stopping, bool):
-            self.early_stopping = [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS] if early_stopping else []
-        elif isinstance(early_stopping, list):
-            early_stopping = [string.lower() for string in early_stopping]
-            for el in early_stopping:
-                if el in [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]:
-                    self.early_stopping.append(el)
-            if not self.early_stopping:
-                logger.error(msg)
-                raise ValueError(msg)
-        elif isinstance(early_stopping, str):
-            if early_stopping.lower() in [LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS]:
-                self.early_stopping = [early_stopping.lower()]
-            else:
-                logger.error(msg)
-                raise ValueError(msg)
+        self.early_stopping = _set_early_stopping(early_stopping)
 
         if not validation and criterion == "gini":
             msg = "Using Gini index on training set might yield an overfitted model."

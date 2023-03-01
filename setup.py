@@ -34,13 +34,14 @@ setup(name='lrtree',
       author='Adrien Ehrhardt, Dmitry Gaynullin, Elise Bayraktar',
       author_email='Groupe-recherche-operationnelle.GRO@credit-agricole-sa.fr',
       install_requires=install_requires,
+      extras_require={'scripts': ["matplotlib", "tikzplotlib", "kaggle"]},
       test_suite="pytest-runner",
       test_requires=install_requires_dev,
       classifiers=[
           "Programming Language :: Python :: 3",
           "Operating System :: OS Independent",
       ],
-      scripts=["scripts/fit_data_reelles.py",
-               "scripts/traitement_data.py",
-               "scripts/validation.py"]
+      entry_points={
+           'console_scripts': ["lrtree-consistency=lrtree._command_line.consistency:main",
+                               "lrtree-realdata=lrtree._command_line.realdataopen:main"]}
       )

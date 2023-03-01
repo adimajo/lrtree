@@ -5,8 +5,10 @@ verify_ssl = false
 
 [dev-packages]
 flake8 = "*"
+bandit = "*"
 sphinx = "*"
 sphinx-rtd-theme = "*"
+myst-parser = "*"
 pytest = "*"
 coverage = "*"
 numpydoc = "*"
@@ -16,7 +18,7 @@ twine = "*"
 pipenv_to_requirements = "*"
 vertica-python = "*"
 verticapy = "*"
-kaggle-cli = "*"
+kaggle = "*"
 pyinstrument = "*"
 
 [packages]

@@ -11,11 +11,10 @@ on:
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9]
+        python-version: [3.8, 3.9, '3.10']
 
     steps:
     - uses: actions/checkout@v2
@@ -28,17 +27,15 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        apt update
-        apt install -y libxml2-dev libxmlsec1-dev
         python -m pip install --upgrade pip
-        pip install pipenv
-        pipenv install --dev --skip-lock
+        pip install "pipenv<2022.10.4"
+        pipenv install -d
+        pipenv --version
         export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'`
         echo "APPLICATION_TAG_VERSION=$APPLICATION_TAG_VERSION" >> $GITHUB_ENV
     - name: Lint with flake8
       run: |
-        pipenv run flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=tests/conftest.py
-        pipenv run flake8 --ignore=W504 . --count --max-complexity=15 --max-line-length=120 --statistics --exclude=tests/conftest.py
+        pipenv run flake8 --ignore=W504 lrtree --count --show-source --max-complexity=15 --max-line-length=120 --statistics
     - name: Test with coverage and pytest
       run: |
         pipenv run coverage run --source lrtree -m pytest
@@ -46,7 +43,6 @@ jobs:
         pipenv run coverage xml
     - name: Test security
       run: |
-        pipenv run pip install bandit
         pipenv run bandit -r lrtree
     - name: Build documentation
       run: |
@@ -73,7 +69,13 @@ jobs:
         git checkout master
     - name: Build and check package
       run: |
-        pipenv run pipenv_to_requirements
         pipenv run pip install --upgrade keyring keyrings.alt
         pipenv run python setup.py sdist bdist_wheel
         pipenv run twine check dist/*
+    - name: Upload to pypi
+      if: ${{ matrix.python-version==3.8 }}
+      env:
+        TWINE_USERNAME: ${{ secrets.TWINE_USERNAME }}
+        TWINE_PASSWORD: ${{ secrets.TWINE_PASSWORD }}
+      run: |
+        pipenv run twine upload --config-file .pypirc --repository pypi dist/*

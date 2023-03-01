@@ -16,27 +16,7 @@ variables:
   tags:
   - kubernetes
 
-.common_deploy_deb: &common_deploy_deb
-  before_script:
-    # Install ssh-agent if not already installed, it is required by Docker.
-    # (change apt-get to yum if you use a CentOS-based image)
-    - 'which ssh-agent || ( apt update && apt install -y openssh-client )'
-
-    # Run ssh-agent (inside the build environment)
-    - eval $(ssh-agent -s)
-
-    # Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
-    - echo "$GITLAB_SSH_KEY" |  tr -d ' ' | base64 -d | ssh-add -
-    - mkdir -p ~/.ssh
-    - chmod 700 ~/.ssh
-    - ssh-keyscan gitlab.ca.cib >> ~/.ssh/known_hosts
-    - chmod 644 ~/.ssh/known_hosts
-    - apt update
-    - apt install -y git
-    - git config --global user.name "$GITLAB_USER_NAME"
-    - git config --global user.email "$GITLAB_USER_EMAIL"
-
-.global_cache: &global_cache:
+.global_cache: &global_cache
   cache:
     paths:
       - .cache/pip
@@ -44,7 +24,7 @@ variables:
       - .cache/venvs
     policy: pull-push
 
-.pull_cache: &pull_cache:
+.pull_cache: &pull_cache
   cache:
     paths:
       - .cache/pip
@@ -69,10 +49,8 @@ lint:
   <<: *common_tag
   <<: *common_python
   script:
-    - cd lrtree
     - pip install flake8
-    - flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    - flake8 . --count --max-complexity=15 --max-line-length=120 --statistics
+    - flake8 --ignore=W504 lrtree --count --show-source --max-complexity=15 --max-line-length=120 --statistics
   only:
     refs:
       - branches
@@ -91,8 +69,9 @@ install:
   <<: *common_tag
   <<: *common_python
   script:
-    - pip install pipenv
+    - pip install "pipenv<2022.10.4"
     - pipenv install
+    - pipenv run python -c 'import lrtree; print(lrtree.__version__)'  # otherwise next line doesn't error
     - echo export APPLICATION_TAG_VERSION=`pipenv run python -c 'import lrtree; print(lrtree.__version__)'` >> build.env
   only:
     - master
@@ -107,7 +86,7 @@ test:
   <<: *common_tag
   <<: *common_python
   script:
-    - pip install pipenv
+    - pip install "pipenv<2022.10.4"
     - pipenv install -d --skip-lock
     - pipenv run coverage run --source lrtree/ -m pytest
     - pipenv run coverage report
@@ -127,7 +106,7 @@ security:
   <<: *common_python
   <<: *common_tag
   script:
-    - pip install pipenv
+    - pip install "pipenv<2022.10.4"
     - pipenv run bandit -r lrtree
 
 quality_check:
@@ -141,10 +120,13 @@ quality_check:
     SONAR_SCANNER_OPTS: "-Djavax.net.ssl.trustStore=cacerts"
   script:
     - . ./build.env
-    - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
-    - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
     - apk --update add java-common
-    - keytool -import -alias mycert -file cacreditagricoleserver.crt -storetype jks -trustcacerts -noprompt -keypass keypass -keystore cacerts -storepass test@123
+    - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then wget -qO - ${PKI}/cacreditagricoleserver.crt >> cacreditagricoleserver.crt ; fi
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then wget -qO - ${PKI}/rca_credit_agricole_group.crt >> rca_credit_agricole_group.crt ; fi
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then cat cacreditagricoleserver.crt rca_credit_agricole_group.crt > credit_agricole_bundle.crt ; fi
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then keytool -import -alias mycert -file cacreditagricoleserver.crt -storetype jks -trustcacerts -noprompt -keypass keypass -keystore cacerts -storepass test@123 ; fi
+    - if [ ! -z $GITLAB_SRV_ACCOUNT ]; then export SONAR_SCANNER_OPTS="-Djavax.net.ssl.trustStore=cacerts" ; fi
     - sonar-scanner -Dsonar.exclusions=tests/**,coverage.xml,setup.py,docs/** -Dsonar.python.coverage.reportPaths=coverage.xml -Dsonar.qualitygate.wait=true -Dsonar.projectKey=$SONAR_KEY -Dsonar.projectVersion=$APPLICATION_TAG_VERSION
   only:
    - master
@@ -156,7 +138,7 @@ document:
   <<: *common_tag
   script:
     - . ./build.env
-    - pip install pipenv
+    - pip install "pipenv<2022.10.4"
     - apt update
     - apt install -y make libpq-dev gcc git
     - cd docs
@@ -201,15 +183,15 @@ deploy:
   script:
     - apt-get update
     - apt-get install -y wget
-    - pip install pipenv
-    - pipenv run pipenv_to_requirements
+    - pip install "pipenv<2022.10.4"
     - pipenv run python3 setup.py sdist bdist_wheel
     - python3 setup.py sdist bdist_wheel
-    - wget -qO - http://crl-priv-pki.credit-agricole.fr/ca/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
-    - export CURL_CA_BUNDLE=""
+    - wget -qO - ${PKI}/cacreditagricoleserver.crt >> cacreditagricoleserver.crt
+    - wget -qO - ${PKI}/rca_credit_agricole_group.crt >> rca_credit_agricole_group.crt
+    - cat cacreditagricoleserver.crt rca_credit_agricole_group.crt > credit_agricole_bundle.crt
     - 'echo TARGET REPOSITORY : ${ARTI_PYPI_SCRATCH_REGISTRY}'
-    - echo ${ARTI_PYPI_SCRATCH_REGISTRY} >> .pypirc
-    - pipenv run twine upload --cert cacreditagricoleserver.crt --config-file .pypirc --repository arti dist/*
+    - echo "${ARTI_REGISTRY}/artifactory/api/pypi/${ARTI_PYPI_SCRATCH_REGISTRY}" >> .pypirc
+    - pipenv run twine upload --cert credit_agricole_bundle.crt --config-file .pypirc --repository arti dist/*
   only:
    - master
 
@@ -243,17 +225,10 @@ promote_stable:
     IMAGE: lrtree
   script:
     - . ./build.env
-#    - apk update
-#    - apk add --no-cache python3 py3-pip
     - 'echo GENERATED TAG : $APPLICATION_TAG_VERSION'
-    - jfrog config add rt-server --artifactory-url=https://${ARTI_REGISTRY} --user=${ARTI_USER} --password=${ARTI_PASSWORD} --interactive=false
+    - jfrog config add rt-server --artifactory-url=https://${ARTI_REGISTRY}/artifactory --user=${ARTI_USER} --password=${ARTI_PASSWORD} --interactive=false
     - jfrog config use rt-server
-    - jfrog rt ping
     - jfrog rt pip-config --server-id-resolve rt-server --repo-resolve ${TARGET_REPO}
     - if [[ $(jfrog rt u dist/ ${TARGET_REPO}/${IMAGE}/${APPLICATION_TAG_VERSION}/ --build-name=${IMAGE} --build-number=${APPLICATION_TAG_VERSION} --module=${IMAGE} | jq --raw-output '.status') = "success" ]]; then { echo "Success"; exit 0; }; else { echo >&2 "Error in promote"; exit 1; }; fi
-#    - which python3
-#    - ln -s $(which python3) /usr/bin/python
-#    - CURL_CA_BUNDLE="" JFROG_CLI_LOG_LEVEL=DEBUG jfrog rt pip-install ${IMAGE}
-#    - pip show ${IMAGE}
   only:
    - master

@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 import lrtree
 from lrtree import LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS
-from lrtree.discretization import _categorie_data_bin_train, _categorie_data_bin_test, bin_data_cate_train, bin_data_cate_test
+from lrtree.discretization import bin_data_cate_train
 from lrtree.logreg import LogRegSegment
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -230,7 +230,6 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
             c_iter_to_keep = np.ones(predictions_log.shape[1], dtype=bool)
             # Renumbering
             dict_of_values = {v: k for k, v in enumerate(np.unique(df["c_hat"]))}
-            # df["c_hat"] = df["c_hat"].apply(lambda x, values=dict_of_values: values[x])
             df.replace({"c_hat": dict_of_values}, inplace=True)
 
             # Getting p(y | x, c_hat) and filling the probabilities
@@ -413,14 +412,10 @@ def _update_best(self, i, treatment, df, logregs_c_map, link):
         stopping_criterion = True
         logger.info(f"{STOPPED_AT_ITERATION} {i}")
 
-    # best_treat = {}
-    # if self.data_treatment:
-    #     best_treat = {"global": treatment["global"]}
-    #     for c_iter in range(df["c_hat"].nunique()):
-    #         best_treat[c_iter] = {"enc": deepcopy(treatment[c_iter]["enc"]),
-    #                               "merged_cat": deepcopy(treatment[c_iter]["merged_cat"]),
-    #                               "discret_cat": deepcopy(treatment[c_iter]["discret_cat"])}
-    self.best_treatment = deepcopy(treatment)
+    best_treat = {}
+    if self.data_treatment:
+        best_treat = {"global": treatment["global"]}
+    self.best_treatment = deepcopy(best_treat)
     self.best_logreg = logregs_c_map
     self.best_link = link
     self.best_criterion = self.criterion_iter[i]
