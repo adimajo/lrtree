@@ -68,6 +68,7 @@ class LogRegSegment(PossiblyOneClassReg):
 
     def fit(self, **kwargs):
         train_data = kwargs['X']
+        train_data['y'] = kwargs['y']
         if self.data_treatment:
             train_data, labels, enc, merged_cat, discret_cat, scaler, len_col_num = _categorie_data_bin_train(
                 data=train_data,

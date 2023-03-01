@@ -64,7 +64,7 @@ def chi2_test(liste):
         return 1
 
 
-def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2) -> (pd.DataFrame, dict):
+def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2, group: bool = True) -> (pd.DataFrame, dict):
     """
     Chi2 independence algorithm to group modalities
 
@@ -78,35 +78,37 @@ def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2) ->
         Column we aim to predict
     :param float seuil:
         Value for the p-value over which we merge modalities
+    :param bool group:
+        Whether to group categorical features
     """
     X_grouped = X.copy()
 
     # Necessary to be able to compare (and unique) categories
     X_grouped[var] = X_grouped[var].astype(str)
     initial_categories = np.unique(X_grouped[var])
-
-    p_value = 1
-    # We want a minimum of two categories, otherwise the variable becomes useless
-    while p_value > seuil and len(np.unique(X_grouped[var])) > 2:
-        # Counts the number of 0/1 by modality
-        freq_table = X_grouped.groupby([var, var_predite]).size().reset_index()
-        # All the combinations of values
-        liste_paires_modalities = list(itertools.combinations(np.unique(X_grouped[var]), 2))
-        # Chi2 between the pairs
-        liste_chi2 = [chi2_test([freq_table.iloc[np.in1d(freq_table[var], pair[0]), 2],
-                                 freq_table.iloc[np.in1d(freq_table[var], pair[1]), 2]]) for pair in
-                      liste_paires_modalities]
-        p_value = max(liste_chi2)
-        if p_value > seuil and len(np.unique(X_grouped[var])) > 1:
-            # Updates the modality to the new concatenated value
-            X_grouped[var].iloc[
-                np.in1d(X_grouped[var], liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])] = \
-                liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][0] + ' - ' + \
-                liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][1]
-            logger.debug(f"Feature {var} - levels merged: "
-                         f"{str(liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])}")
-        else:
-            break
+    if group:
+        p_value = 1
+        # We want a minimum of two categories, otherwise the variable becomes useless
+        while p_value > seuil and len(np.unique(X_grouped[var])) > 2:
+            # Counts the number of 0/1 by modality
+            freq_table = X_grouped.groupby([var, var_predite]).size().reset_index()
+            # All the combinations of values
+            liste_paires_modalities = list(itertools.combinations(np.unique(X_grouped[var]), 2))
+            # Chi2 between the pairs
+            liste_chi2 = [chi2_test([freq_table.iloc[np.in1d(freq_table[var], pair[0]), 2],
+                                     freq_table.iloc[np.in1d(freq_table[var], pair[1]), 2]]) for pair in
+                          liste_paires_modalities]
+            p_value = max(liste_chi2)
+            if p_value > seuil and len(np.unique(X_grouped[var])) > 1:
+                # Updates the modality to the new concatenated value
+                X_grouped[var].iloc[
+                    np.in1d(X_grouped[var], liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])] = \
+                    liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][0] + ' - ' + \
+                    liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][1]
+                logger.debug(f"Feature {var} - levels merged: "
+                             f"{str(liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])}")
+            else:
+                break
     new_categories = np.unique(X_grouped[var])
 
     # Dictionary of the correspondence old category : merged category
@@ -273,13 +275,14 @@ def discretize_feature(X: pd.DataFrame, var: str, var_predite: str):
     return X, binning
 
 
-def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, discretize=True):
+def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None,
+                              discretize: bool = False, group: bool = False):
     """
-    Binarise the categorical variables (after merging categories)
+    Binarize the categorical variables (after merging categories)
     Returns the data, the encoder and the column labels
 
     :param pandas.DataFrame data: data with some variables being categorical
-    :param str var_cible: name of target
+    :param str or pandas.Series var_cible: name of target
     :param list categorical: list of categorical features' names
     :param bool discretize: whether to discretize continuous features
     """
@@ -291,7 +294,7 @@ def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, d
             if column in X.columns:
                 to_change.append(column)
                 X.loc[:, column] = X[column].astype(str)
-                X, dico = grouping(X, column, var_cible)
+                X, dico = grouping(X, column, var_cible, group)
                 merged_cat[column] = dico
 
     discret_cat = {}
@@ -314,7 +317,6 @@ def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, d
         X_cat = pd.DataFrame(X_cat)
         X_cat = X_cat.reset_index(drop=True)
 
-    # Used when we had decided to keep the continuous numerical variables
     X_num = X.drop(to_change, axis=1)
     X_num_transformed = None
     col_num = X_num.columns
@@ -376,7 +378,8 @@ def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler:
                 X_val.loc[:, column] = X_val[column].astype(np.float64)
                 X_val = apply_discretization(X_val, column, discret_cat[column])
 
-    X_val_cat = enc.transform(X_val[to_change])
+    if to_change:
+        X_val_cat = enc.transform(X_val[to_change])
     X_val_cat = pd.DataFrame(X_val_cat)
 
     X_val_num = X_val.drop(to_change, axis=1)
@@ -736,7 +739,8 @@ def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScale
     return X_val
 
 
-def traitement_train(data: pd.DataFrame, target: str, categorical=None, discretize=False) -> tuple:
+def traitement_train(data: pd.DataFrame, target: str, categorical=None, discretize: bool = False,
+                     group: bool = False) -> tuple:
     """
     Traite les données en gérant les valeurs extremes, les variables catégoriques et en normalisant
 
@@ -744,6 +748,7 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
     :param str target: variable cible
     :param list categorical: list of categorical features' names
     :param bool discretize: whether to discretize continuous features
+    :param bool group: whether to group categorical features
     :return: processed data, labels of columns, encoder for categorical data and scaler for numerical data
     :rtype: tuple
     """
@@ -755,15 +760,18 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
         X,
         var_cible=target,
         categorical=categorical,
-        discretize=discretize)
+        discretize=discretize,
+        group=group)
     return X, labels, enc, scaler, merged_cat, discrete_cat, len_col_num
 
 
 class Processing:
-    def __init__(self, target: str, discretize: bool = False, merge_threshold: float = 0.2):
+    def __init__(self, target: str, discretize: bool = False, group: bool = False,
+                 merge_threshold: float = 0.2):
         self.target = target
         self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat = [None] * 5
         self.discretize = discretize
+        self.group = group
         self.num_cols = []
         self.cat_cols = []
         self.merge_threshold = merge_threshold
@@ -787,7 +795,7 @@ class Processing:
 
         # Application sur train
         X, self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat, len_col_num = traitement_train(
-            data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize
+            data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize, group=self.group
         )
         assert len_col_num == len(self.num_cols)  # nosec
         self.X_train = X

@@ -14,7 +14,7 @@ from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 from typing import Tuple
 from lrtree.discretization import Processing
-from lrtree.fit import _fit_parallelized
+from lrtree.fit import _fit_parallelized, _fit_func
 from operator import itemgetter
 import numpy as np
 from sklearn.linear_model import LogisticRegressionCV
@@ -154,22 +154,20 @@ def get_fraud_data(target: str, seed: int):
         original_val[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
-def get_data(dataset: str, seed: int = 0):
-    logger.info(f"Getting {dataset} dataset and preprocessing.")
-    processing = Processing(target=targets[dataset])
+def get_data(dataset: str, seed: int = 0, discretize: bool = False, group: bool = False):
+    logger.info(f"Getting {dataset} dataset.")
     func_to_call = f"get_{dataset}_data"
     func_to_call = globals()[func_to_call]
     original_train, original_val, original_test, labels_train, labels_val, labels_test, categorical = func_to_call(
         target=targets[dataset], seed=seed)
-    if dataset == "fraud":
-        X_train = original_train.drop(targets[dataset], axis=1)
-        X_val = original_val.drop(targets[dataset], axis=1)
-        X_test = original_test.drop(targets[dataset], axis=1)
-    else:
-        X_train = processing.fit_transform(X=original_train, categorical=categorical)
-        X_val = processing.transform(original_val)
-        X_test = processing.transform(original_test)
-    return X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
+    processing = Processing(target=targets[dataset], group=group, discretize=discretize)
+    X_train = processing.fit_transform(X=original_train, categorical=categorical)
+    X_val = processing.transform(original_val)
+    X_test = processing.transform(original_test)
+    return original_train.drop(targets[dataset], axis=1),\
+           original_val.drop(targets[dataset], axis=1),\
+           original_test.drop(targets[dataset], axis=1),\
+           X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
 
 
 def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: np.ndarray, labels_test: np.ndarray,
@@ -182,13 +180,13 @@ def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: 
     :return: Performance of Lrtree, LogisticRegression, DecitionTree, XGboost and RandomForest on test set
     :rtype: (float, float)
     """
-    model = _fit_parallelized(
-        nb_init=8,
+    model = _fit_func(
+        # nb_init=6,
         class_kwargs={
             "criterion": "aic",
             "algo": 'SEM',
             "class_num": class_num,
-            "max_iter": 300,
+            "max_iter": 50,
             "validation": False,
             "data_treatment": data_treatment,
             "leaves_as_segment": leaves_as_segment,
@@ -206,11 +204,12 @@ def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: 
 
 
 def run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical):
-    for class_num in range(5, 6):
-        for data_treatment in [False]:
-            for leaves_as_segment in [True]:
-                for optimal_size in [True]:
-                    for tree_depth in range(3, 5):
+    results_lrtree = []
+    for class_num in range(3, 10, 2):
+        for data_treatment in [True, False]:
+            for leaves_as_segment in [True, False]:
+                for optimal_size in [True, False]:
+                    for tree_depth in range(2, 5):
                         lrtree_test = run_benchmark(
                             X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical,
                             class_num, data_treatment, leaves_as_segment, optimal_size,
@@ -224,7 +223,7 @@ def run_logreg(X_cv, labels_cv, X_test, labels_test):
     alphas = np.logspace(-2, 0, num=21)
     l1_ratios = np.linspace(0, 1, 11)
     pipeline = make_pipeline(StandardScaler(), LogisticRegressionCV(
-        Cs=alphas, cv=10, penalty='elasticnet', scoring="roc_auc", solver="saga", n_jobs=-1, l1_ratios=l1_ratios))
+        Cs=alphas, cv=2, penalty='elasticnet', scoring="roc_auc", solver="saga", n_jobs=6, l1_ratios=l1_ratios))
     pipeline.fit(X_cv, labels_cv)
     return roc_auc_score(labels_test, pipeline.predict_proba(X_test)[:, 1])
 
@@ -257,21 +256,21 @@ def run_gradientboosting(X_cv, labels_cv, X_test, labels_test):
     logger.info("Fitting Gradient Boosting")
 
     param_grid = {
-        'learning_rate': [0.01, 0.1, 0.5, 2.0],
+        'learning_rate': [0.01, 0.5, 2.0],
         'n_estimators': [100, 300, 1000],
         'subsample': [0.5, 0.75, 1.0],
         'min_samples_split': [10, 30],
         'min_samples_leaf': [1, 5, 20],
         'max_depth': [2, 5, 10],
-        'max_features': ['log2', 'sqrt', None]
+        'max_features': ['sqrt', None]
     }
 
     model_boost = GradientBoostingClassifier()
     grid_search = GridSearchCV(estimator=model_boost,
                                param_grid=param_grid,
-                               cv=10,
-                               n_jobs=-1,
-                               verbose=2)
+                               cv=5,
+                               n_jobs=6,
+                               verbose=0)
     grid_search.fit(X_cv, labels_cv)
     return roc_auc_score(labels_test, grid_search.predict_proba(X_test)[:, 1])
 
@@ -284,16 +283,16 @@ def run_randomforest(X_cv, labels_cv, X_test, labels_test):
         'min_samples_split': [2, 10, 30],
         'min_samples_leaf': [5, 20],
         'max_depth': [None, 2, 5],
-        'max_features': ['log2', 'sqrt', None],
-        'ccp_alpha': [0.0, 0.1, 1.0]
+        'max_features': ['sqrt', None],
+        'ccp_alpha': [0.0, 0.5]
     }
 
     model_boost = RandomForestClassifier()
     grid_search = GridSearchCV(estimator=model_boost,
                                param_grid=param_grid,
                                cv=5,
-                               n_jobs=-1,
-                               verbose=2)
+                               n_jobs=6,
+                               verbose=0)
     grid_search.fit(X_cv, labels_cv)
     return roc_auc_score(labels_test, grid_search.predict_proba(X_test)[:, 1])
 
@@ -314,12 +313,12 @@ def run_other_models(X_train, X_val, X_test, labels_train, labels_val, labels_te
 
 if __name__ == "__main__":
     results_df = []
-    for data in ["german"]:
+    for data in ["adult"]:
         results_exp = []
         for seed in tqdm(range(0, 600, 30), desc="Seeds"):
-            results_lrtree = []
-            X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical = get_data(data, seed)
-            lrtree_test = run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical)
+            original_train, original_val, original_test, X_train, X_val, X_test, labels_train, labels_val, labels_test,\
+                categorical = get_data(data, seed)
+            lrtree_test = run_lrtree(original_train, original_val, original_test, labels_train, labels_val, labels_test, categorical)
             reglog_test, tree_test, boost_test, forest_test = run_other_models(
                 X_train, X_val, X_test, labels_train, labels_val, labels_test)
             results_exp.append([lrtree_test, reglog_test, tree_test, boost_test, forest_test])

@@ -102,25 +102,10 @@ def _calc_criterion(self, df: pd.DataFrame, model_c_map: list, treatment: dict =
             validate_rows = idx & df.index.isin(self.validate_rows)
             y_validate = df[validate_rows]["y"].tolist()
             X_validate = df[validate_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
-            # if self.data_treatment:
-            #     X_validate = X_validate.rename(columns=self.column_names)
-            #     X_validate = _categorie_data_bin_test(
-            #         data_val=X_validate,
-            #         enc=treatment[c_iter]["enc"],
-            #         scaler=treatment[c_iter]["scaler"],
-            #         merged_cat=treatment[c_iter]["merged_cat"],
-            #         discret_cat=treatment[c_iter]["discret_cat"],
-            #         categorical=self.categorical,
-            #         discretize=self.discretize)
         else:
             train_rows = idx & df.index.isin(self.train_rows)
             y_validate = df[train_rows]["y"].tolist()
             X_validate = df[train_rows].drop(['y', 'c_hat', 'c_map'], axis=1)
-            # if self.data_treatment:
-            #     X_validate = _categorie_data_bin_test(X_validate.rename(columns=self.column_names),
-            #                                           treatment[c_iter]["enc"],
-            #                                           treatment[c_iter]["merged_cat"],
-            #                                           treatment[c_iter]["discret_cat"])
         if X_validate.shape[0] > 0:
             y_pred = model.predict_proba(X_validate)[:, 1]
             lengths_pred.append(X_validate.shape[0])
@@ -428,14 +413,14 @@ def _update_best(self, i, treatment, df, logregs_c_map, link):
         stopping_criterion = True
         logger.info(f"{STOPPED_AT_ITERATION} {i}")
 
-    best_treat = {}
-    if self.data_treatment:
-        best_treat = {"global": treatment["global"]}
-        # for c_iter in range(df["c_hat"].nunique()):
-        #     best_treat[c_iter] = {"enc": deepcopy(treatment[c_iter]["enc"]),
-        #                           "merged_cat": deepcopy(treatment[c_iter]["merged_cat"]),
-        #                           "discret_cat": deepcopy(treatment[c_iter]["discret_cat"])}
-    self.best_treatment = deepcopy(best_treat)
+    # best_treat = {}
+    # if self.data_treatment:
+    #     best_treat = {"global": treatment["global"]}
+    #     for c_iter in range(df["c_hat"].nunique()):
+    #         best_treat[c_iter] = {"enc": deepcopy(treatment[c_iter]["enc"]),
+    #                               "merged_cat": deepcopy(treatment[c_iter]["merged_cat"]),
+    #                               "discret_cat": deepcopy(treatment[c_iter]["discret_cat"])}
+    self.best_treatment = deepcopy(treatment)
     self.best_logreg = logregs_c_map
     self.best_link = link
     self.best_criterion = self.criterion_iter[i]
@@ -483,7 +468,6 @@ def _init_models(self):
 
 
 def _init_fit(self, X, y):
-    models = _init_models(self)
     self.criterion_iter = []
     df = pd.DataFrame(deepcopy(X))
     if isinstance(X, pd.DataFrame):
@@ -497,6 +481,7 @@ def _init_fit(self, X, y):
     else:
         df = df.add_prefix("par_")
         self.column_names = {}
+    models = _init_models(self)
     df["y"] = y
 
     treatment = {}

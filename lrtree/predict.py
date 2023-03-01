@@ -19,7 +19,8 @@ def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
     else:
         if self.data_treatment:
             enc_global = self.best_treatment["global"]
-            classes = link.predict(bin_data_cate_test(X, enc_global))
+            classes = link.predict(bin_data_cate_test(
+                data_val=X, enc=enc_global, categorical=self.categorical))
         else:
             classes = link.predict(X)
         # Classes that were predicted : c_map
@@ -34,11 +35,6 @@ def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
     for i in range(len(liste_cla)):
         filtre = X_df["class"] == liste_cla[i]
         bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
-        if self.data_treatment:
-            treatment = self.best_treatment
-            bloc = _categorie_data_bin_test(bloc.rename(columns=self.column_names), treatment[liste_cla[i]]["enc"],
-                                            treatment[liste_cla[i]]["merged_cat"],
-                                            treatment[liste_cla[i]]["discret_cat"])
         if fun == "predict":
             bloc_pred = logreg[i].predict(bloc)
         else:
