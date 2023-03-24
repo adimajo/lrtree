@@ -77,7 +77,8 @@ def one_experiment(X, y, n_init, n_iter, leaves_as_segment):
         split1[feature[0]].append(threshold[0])
         # 0, 1 et 4 sont les nodes de split
         split2[feature[1]].append(threshold[1])
-        split2[feature[4]].append(threshold[4])
+        if len(threshold) >= 5:
+            split2[feature[4]].append(threshold[4])
 
         if len(feature) == 7 and ((feature == [0, 1, -2, -2,
                                                1, -2, -2]).all() or (feature == [1, 0, -2, -2, 0, -2, -2]).all()):
