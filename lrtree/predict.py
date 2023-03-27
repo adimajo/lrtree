@@ -17,7 +17,7 @@ def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
         liste_cla = [0]
         classes = np.zeros(len(X))
     else:
-        if self.data_treatment:
+        if self.categorical:
             enc_global = self.best_treatment["global"]
             classes = link.predict(bin_data_cate_test(
                 data_val=X, enc=enc_global, categorical=self.categorical))

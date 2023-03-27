@@ -16,7 +16,7 @@ def test_predict():
     # model.precision(pd.DataFrame(X), y)
 
     model = lrtree.Lrtree(test=False, validation=False, criterion="aic", class_num=10, max_iter=50,
-                          data_treatment=False)
+                          group=False)
     model.fit(pd.DataFrame(X), y, nb_init=1, tree_depth=2)
     model.predict(pd.DataFrame(X))
     model.predict_proba(pd.DataFrame(X))

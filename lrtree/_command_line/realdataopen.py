@@ -11,7 +11,7 @@ from sklearn.tree import DecisionTreeClassifier  # noqa: E402
 from tqdm import tqdm  # noqa: E402
 from typing import Tuple  # noqa: E402
 from lrtree.discretization import Processing  # noqa: E402
-from lrtree.fit import _fit_parallelized  # noqa: E402
+from lrtree.fit import _fit_func  # noqa: E402
 from operator import itemgetter  # noqa: E402
 import numpy as np  # noqa: E402
 from sklearn.linear_model import LogisticRegressionCV  # noqa: E402
@@ -184,8 +184,8 @@ def get_data(dataset: str, seed: int = 0, discretize: bool = False, group: bool 
         X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
 
 
-def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: np.ndarray, labels_test: np.ndarray,
-                  categorical: list, class_num: int = 5, data_treatment: bool = False,
+def run_benchmark(original_train, original_val, original_test, labels_train: np.ndarray, labels_val: np.ndarray, labels_test: np.ndarray,
+                  categorical: list, class_num: int = 5, discretization: bool = False, group: bool = False,
                   leaves_as_segment: bool = False, optimal_size: bool = False,
                   tree_depth: int = 2) -> Tuple[float, float]:
     """
@@ -194,41 +194,42 @@ def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: 
     :return: Performance of Lrtree, LogisticRegression, DecitionTree, XGboost and RandomForest on test set
     :rtype: (float, float)
     """
-    model = _fit_parallelized(
-        nb_init=8,
+    model = _fit_func(
+        # nb_init=8,
         class_kwargs={
             "criterion": "aic",
             "algo": 'SEM',
             "class_num": class_num,
             "max_iter": 300,
             "validation": False,
-            "data_treatment": data_treatment,
+            "discretization": discretization,
+            "group": group,
             "leaves_as_segment": leaves_as_segment,
             "early_stopping": "changed segments"},
         fit_kwargs={
-            "X": X_train,
+            "X": original_train,
             "y": labels_train,
             "optimal_size": optimal_size,
             "tree_depth": tree_depth,
             "tol": 1e-9,
             "categorical": categorical})
 
-    return roc_auc_score(labels_val, model.predict_proba(X_val)),\
-        roc_auc_score(labels_test, model.predict_proba(X_test))
+    return roc_auc_score(labels_val, model.predict_proba(original_val)),\
+        roc_auc_score(labels_test, model.predict_proba(original_test))
 
 
-def run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical):
+def run_lrtree(original_train, original_val, original_test, labels_train, labels_val, labels_test, categorical):
     results_lrtree = []
     for class_num in range(3, 10, 2):
-        for data_treatment in [True, False]:
-            for leaves_as_segment in [True, False]:
-                for optimal_size in [True, False]:
-                    for tree_depth in range(2, 5):
-                        lrtree_test = run_benchmark(
-                            X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical,
-                            class_num, data_treatment, leaves_as_segment, optimal_size,
-                            tree_depth)
-                        results_lrtree.append(lrtree_test)
+        for discretization in [False]:
+            for group in [False]:
+                for leaves_as_segment in [True, False]:
+                    for optimal_size in [True, False]:
+                        for tree_depth in range(2, 5):
+                            lrtree_test = run_benchmark(
+                                original_train, original_val, original_test, labels_train, labels_val, labels_test,
+                                categorical, class_num, discretization, group, leaves_as_segment, optimal_size, tree_depth)
+                            results_lrtree.append(lrtree_test)
     return max(results_lrtree, key=itemgetter(0))[1]
 
 

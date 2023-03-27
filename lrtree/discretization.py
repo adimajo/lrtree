@@ -352,7 +352,7 @@ def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None,
 
 
 def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScaler, merged_cat: dict,
-                             discret_cat: dict, categorical=None, discretize=False) -> pd.DataFrame:
+                             discret_cat: dict, categorical=None, discretize=False, group=False) -> pd.DataFrame:
     """
     Data treatment of the test data, using the method (merged categories, discretisation, OneHotEncoder) learned on
     the train data

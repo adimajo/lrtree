@@ -77,32 +77,26 @@ class LogRegSegment(PossiblyOneClassReg):
     def __init__(self, **kwargs):
         super().__init__()
         self.categories = None
-        self.data_treatment = False
-        self.discretization = False
-        self.column_names = None
-        self.categories = {}
-        if 'data_treatment' in kwargs:
-            self.data_treatment = kwargs['data_treatment']
-            self.discretization = kwargs['discretization']
-            self.column_names = kwargs['column_names']
-            self.categories = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
-            self.scaler = None
-            self.categorical = None
+        self.categorical = kwargs.get('categorical', [])
+        self.discretization = kwargs.get('discretization', False)
+        self.group = kwargs.get('group', False)
+        self.column_names = kwargs.get('column_names', None)
+        self.categories = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
+        self.scaler = None
 
     def fit(self, **kwargs):
         """
         Fits the LogRegSegment by preprocessing the data (if need be / asked for) and calling fit on sklearn
         """
-        train_data = kwargs['X']
+        train_data = kwargs.pop("X")
         train_data['y'] = kwargs['y']
-        if self.data_treatment:
+        if self.categorical or self.discretization:
             train_data, labels, enc, merged_cat, discret_cat, scaler, len_col_num = _categorie_data_bin_train(
                 data=train_data,
                 var_cible="y",
-                categorical=kwargs['categorical'],
-                discretize=self.discretization
-            )
-            self.categorical = kwargs['categorical']
+                categorical=self.categorical,
+                discretize=self.discretization,
+                group=self.group)
             self.scaler = scaler
             self.categories["enc"] = enc
             self.categories["merged_cat"] = merged_cat
@@ -112,7 +106,6 @@ class LogRegSegment(PossiblyOneClassReg):
                 train_data.drop(columns="y", inplace=True)
             except KeyError:
                 pass
-        kwargs.pop("X")
         super_fit_args = list(inspect.signature(super().fit).parameters)
         kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
         return super().fit(X=train_data, **kwargs_fit)
@@ -121,7 +114,7 @@ class LogRegSegment(PossiblyOneClassReg):
         """
         Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict on sklearn
         """
-        if self.data_treatment:
+        if self.categorical or self.discretization:
             # Applies the data treatment for this leaf
             # X = X.rename(columns=self.column_names)
             X = _categorie_data_bin_test(data_val=X,
@@ -138,7 +131,7 @@ class LogRegSegment(PossiblyOneClassReg):
         Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict_proba
         on sklearn
         """
-        if self.data_treatment:
+        if self.categorical or self.discretization:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)
             X = _categorie_data_bin_test(data_val=X,

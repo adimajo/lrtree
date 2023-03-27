@@ -36,7 +36,7 @@ def test_args_fit():
     model.fit(X, y, nb_init=1, tree_depth=2)
     with pytest.raises(ValueError):
         model = lrtree.Lrtree(test=False, validation=False, criterion="gini", ratios=(0.7,), class_num=10,
-                              max_iter=1, data_treatment=True)
+                              max_iter=1, discretization=True)
         model.fit(X, y, nb_init=1, tree_depth=2)
     # model = lrtree.Lrtree(test=False, validation=True, criterion="gini", ratios=(0.7,), class_num=10,
     #                       max_iter=1, data_treatment=True)

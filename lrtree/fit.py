@@ -241,8 +241,9 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                     c_iter_to_keep[index] = False
                     continue
                 y = df[idx & df.index.isin(self.train_rows)]['y']
-                models[c_iter].fit(X=train_data, y=y,
-                                   categorical=self.categorical)
+                models[c_iter].fit(X=train_data,
+                                   y=y,
+                                   treatment=treatment)
                 logregs_c_hat.append(models[c_iter])
                 to_predict = df.drop(['y', 'c_hat', 'c_map'], axis=1)
                 predictions_log[:, c_iter] = models[c_iter].predict_proba(to_predict)[:, 1]
@@ -257,10 +258,11 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                 y = train_data['y']
                 X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
                 model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-2,
-                                      warm_start=True, data_treatment=self.data_treatment,
+                                      warm_start=True, group=self.group,
                                       discretization=self.discretization,
-                                      column_names=self.column_names)
-                logreg = model.fit(X=X, y=y, categorical=self.categorical)
+                                      column_names=self.column_names,
+                                      categorical=self.categorical)
+                logreg = model.fit(X=X, y=y)
                 logregs_c_map.append(logreg)
                 model_c_map.append(model)
 
@@ -413,7 +415,7 @@ def _update_best(self, i, treatment, df, logregs_c_map, link):
         logger.info(f"{STOPPED_AT_ITERATION} {i}")
 
     best_treat = {}
-    if self.data_treatment:
+    if self.categorical:
         best_treat = {"global": treatment["global"]}
     self.best_treatment = deepcopy(best_treat)
     self.best_logreg = logregs_c_map
@@ -455,7 +457,8 @@ def _init_models(self):
         # If penalty ='l1', solver=self.solver or self.solver (large datasets),
         # default ’sag’, C small leads to stronger regularization
         models[c_iter] = LogRegSegment(penalty='l2', solver=self.solver, C=1e-2, tol=1e-2,
-                                       warm_start=True, data_treatment=self.data_treatment,
+                                       warm_start=True, group=self.group,
+                                       categorical=self.categorical,
                                        discretization=self.discretization,
                                        column_names=self.column_names)
 
@@ -480,16 +483,12 @@ def _init_fit(self, X, y):
     df["y"] = y
 
     treatment = {}
-    if self.data_treatment:
+    if self.categorical:
         # Data without treatment (one hot on categorical variables), used for the tree
-        # processing = Processing(target=self.target)
-        # X_tree = processing.fit_transform(X=X.copy(), categorical=self.categorical)
         X_tree, enc_global = bin_data_cate_train(X.copy(), "y", categorical=self.categorical)
         treatment["global"] = enc_global
     else:
         X_tree = df.drop(['y'], axis=1)
-    # if self.categorical:
-    #     self.categorical = ["par_" + colname for colname in self.categorical]
     return df, X_tree, models, treatment
 
 
@@ -530,13 +529,13 @@ def fit(self, X, y, solver: str = "lbfgs", nb_init: int = 1, tree_depth: int = 1
 
     if isinstance(X, pd.DataFrame):
         self.column_names = X.columns.to_list()
-    elif self.data_treatment and not self.categorical:
+    elif self.group and not self.categorical:
         msg = "You did not provide categorical columns name, assuming only numerical columns."
         logger.info(msg)
     else:
         _check_args(X, y)
-    if self.data_treatment and type(X) != pd.DataFrame:
-        msg = "A numpy array cannot have mixed-type input, so using data_treatment is prohibited"
+    if self.group and self.discretize and type(X) != pd.DataFrame:
+        msg = "A numpy array cannot have mixed-type input, so using group and discretize is prohibited"
         logger.error(msg)
         raise ValueError(msg)
 
@@ -579,8 +578,10 @@ def _fit_func(fit_kwargs: dict, class_kwargs: dict = None):
         Maximum depth of the tree used
     :param int class_num:
         Number of initial discretization intervals for all variables.
-    :param bool data_treatment:
-        Whether to discretize / group levels inside the segments.
+    :param bool discretization:
+        Whether to discretize inside the segments.
+    :param bool group:
+        Whether to group levels inside the segments.
     :return: the Lrtree model instance
     :rtype: Lrtree
     """
@@ -626,8 +627,10 @@ def _fit_parallelized(fit_kwargs: dict, class_kwargs: dict = None, nb_init: int 
         Maximum depth of the tree used
     :param int class_num:
         Number of initial discretization intervals for all variables.
-    :param bool data_treatment:
-        Whether to discretize / group levels inside the segments.
+    :param bool discretization:
+        Whether to discretize inside the segments.
+    :param bool group:
+        Whether to group levels inside the segments.
     :return: the Lrtree model instance
     :rtype: Lrtree
 """
