@@ -72,7 +72,8 @@ def chi2_test(liste):
         return 1
 
 
-def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2, group: bool = True) -> (pd.DataFrame, dict):
+def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2, group: bool = True) -> (pd.DataFrame,
+                                                                                                      dict):
     """
     Chi2 independence algorithm to group modalities
 

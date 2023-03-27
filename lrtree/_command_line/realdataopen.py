@@ -28,8 +28,10 @@ def main():
     for data in ["german", "adult", "fraud"]:
         results_exp = []
         for seed in tqdm(range(0, 600, 30), desc="Seeds"):
-            X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical = get_data(data, seed)
-            lrtree_test = run_lrtree(X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical)
+            original_train, original_val, original_test, X_train, X_val, X_test, labels_train, labels_val, labels_test,\
+                categorical = get_data(data, seed)
+            lrtree_test = run_lrtree(original_train, original_val, original_test, labels_train, labels_val, labels_test,
+                                     categorical)
             reglog_test, tree_test, boost_test, forest_test = run_other_models(
                 X_train, X_val, X_test, labels_train, labels_val, labels_test)
             results_exp.append([data, lrtree_test, reglog_test, tree_test, boost_test, forest_test])
@@ -177,9 +179,9 @@ def get_data(dataset: str, seed: int = 0, discretize: bool = False, group: bool 
     X_val = processing.transform(original_val)
     X_test = processing.transform(original_test)
     return original_train.drop(targets[dataset], axis=1),\
-           original_val.drop(targets[dataset], axis=1),\
-           original_test.drop(targets[dataset], axis=1),\
-           X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
+        original_val.drop(targets[dataset], axis=1),\
+        original_test.drop(targets[dataset], axis=1),\
+        X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
 
 
 def run_benchmark(X_train, X_val, X_test, labels_train: np.ndarray, labels_val: np.ndarray, labels_test: np.ndarray,

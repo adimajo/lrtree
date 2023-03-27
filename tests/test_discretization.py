@@ -2,6 +2,7 @@ import numpy as np
 
 import lrtree
 from lrtree._command_line.realdataopen import get_adult_data
+from lrtree._command_line.consistency import main  # to import
 
 
 def test_discretization():
