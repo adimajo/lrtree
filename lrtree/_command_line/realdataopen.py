@@ -228,7 +228,8 @@ def run_lrtree(original_train, original_val, original_test, labels_train, labels
                         for tree_depth in range(2, 5):
                             lrtree_test = run_benchmark(
                                 original_train, original_val, original_test, labels_train, labels_val, labels_test,
-                                categorical, class_num, discretization, group, leaves_as_segment, optimal_size, tree_depth)
+                                categorical, class_num, discretization, group, leaves_as_segment, optimal_size,
+                                tree_depth)
                             results_lrtree.append(lrtree_test)
     return max(results_lrtree, key=itemgetter(0))[1]
 

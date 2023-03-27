@@ -72,7 +72,7 @@ def chi2_test(liste):
         return 1
 
 
-def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2, group: bool = True) -> (pd.DataFrame,
+def grouping(X: pd.DataFrame, var: str, var_predite: str, group: bool = True, seuil: float = 0.2) -> (pd.DataFrame,
                                                                                                       dict):
     """
     Chi2 independence algorithm to group modalities
@@ -126,7 +126,8 @@ def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2, gr
         for cat in regrouped_cate.split(' - '):
             dico_regroupement[cat] = regrouped_cate
 
-    logger.debug(f"Feature {var} went from {len(initial_categories)} to {len(new_categories)} levels.")
+    if group:
+        logger.debug(f"Feature {var} went from {len(initial_categories)} to {len(new_categories)} levels.")
 
     return X_grouped, dico_regroupement
 
