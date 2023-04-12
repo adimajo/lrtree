@@ -234,9 +234,9 @@ def get_data(dataset: str, seed: int = 0, discretize: bool = False, group: bool 
         X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
 
 
-def run_benchmark(original_train, original_val, original_test, labels_train: np.ndarray, labels_val: np.ndarray, labels_test: np.ndarray,
-                  categorical: list, class_num: int = 5, discretization: bool = False, group: bool = False,
-                  leaves_as_segment: bool = False, optimal_size: bool = False,
+def run_benchmark(original_train, original_val, original_test, labels_train: np.ndarray, labels_val: np.ndarray,
+                  labels_test: np.ndarray, categorical: list, class_num: int = 5, discretization: bool = False,
+                  group: bool = False, leaves_as_segment: bool = False, optimal_size: bool = False,
                   tree_depth: int = 2) -> Tuple[float, float]:
     """
     Run a benchmark experiment of Lrtree against other models on test set.
@@ -272,8 +272,8 @@ def run_lrtree(original_train, original_val, original_test, labels_train, labels
     logger.info("Fitting lrtree.")
     results_lrtree = []
     for class_num in range(3, 10, 2):
-        for discretization in [False]:
-            for group in [False]:
+        for discretization in [True, False]:
+            for group in [True, False]:
                 for leaves_as_segment in [True, False]:
                     for optimal_size in [True, False]:
                         for tree_depth in range(2, 5):
