@@ -1,7 +1,13 @@
 import os
-import zipfile
+import pickle  # nosec
+import time
 import warnings
+import zipfile
+from pathlib import Path
+
 warnings.filterwarnings("ignore")
+os.environ["LOGURU_LEVEL"] = "ERROR"
+os.environ["TQDM_DISABLE"] = "False"
 import pandas as pd  # noqa: E402
 from loguru import logger  # noqa: E402
 from sklearn.ensemble import GradientBoostingClassifier  # noqa: E402
@@ -19,25 +25,69 @@ from sklearn.pipeline import make_pipeline  # noqa: E402
 from sklearn.preprocessing import StandardScaler  # noqa: E402
 from sklearn.model_selection import GridSearchCV  # noqa: E402
 
-
+datasets = ["german", "adult", "fraud"]
 targets = {"adult": "Target", "german": "Target", "fraud": "Class"}
+BASE_DIR = os.getcwd()  # change this to shared folder to allow several workers
+BASE_DIR = r"L:\results_lrtree"
 
 
 def main():
     results_df = []
-    for data in ["german", "adult", "fraud"]:
+    for data in datasets:
+        Path(os.path.join(BASE_DIR, "realdataopen/")).mkdir(parents=True, exist_ok=True)
+        if os.path.exists(os.path.join(BASE_DIR, "realdataopen", f"{data}.lock")):
+            continue
+        else:
+            Path(os.path.join(BASE_DIR, "realdataopen", f"{data}.lock")).touch()
         results_exp = []
         for seed in tqdm(range(0, 600, 30), desc="Seeds"):
+            # in case it was started and stopped on some worker / needs manual deletion of .lock
+            if os.path.exists(os.path.join(BASE_DIR, "realdataopen", f"{data}_{seed}.pkl")):
+                continue
             original_train, original_val, original_test, X_train, X_val, X_test, labels_train, labels_val, labels_test,\
                 categorical = get_data(data, seed)
             lrtree_test = run_lrtree(original_train, original_val, original_test, labels_train, labels_val, labels_test,
                                      categorical)
             reglog_test, tree_test, boost_test, forest_test = run_other_models(
                 X_train, X_val, X_test, labels_train, labels_val, labels_test)
-            results_exp.append([data, lrtree_test, reglog_test, tree_test, boost_test, forest_test])
-        results_df.append(pd.DataFrame(results_exp, columns=[
+            results = [data, lrtree_test, reglog_test, tree_test, boost_test, forest_test]
+            logger.info(results)
+            results_exp.append(results)
+            try:
+                with open(os.path.join(BASE_DIR, "realdataopen", f"{data}_{seed}.pkl"), 'wb') as f:
+                    pickle.dump(results, f)
+            except:  # nosec
+                pass
+        partial_df = pd.DataFrame(results_exp, columns=[
             "Dataset", "[MODEL]", "Logistic regression", "Decision tree", "Boosting", "Random Forest"]).agg(
-            ["mean", "std"]))
+            ["mean", "std"])
+        logger.info(partial_df.to_markdown())
+        partial_df.to_pickle(os.path.join(BASE_DIR, "realdataopen", f"{data}.pkl"))
+        results_df.append(partial_df)
+    if len(results_df) == len(datasets):  # means everything was done on same computer
+        results = pd.concat(results_df)
+        results.to_pickle(os.path.join(BASE_DIR, "realdataopen.pkl"))
+    else:
+        results = concat_results_from_workers()
+    return results
+
+
+def concat_results_from_workers():
+    results_df = []
+    for data in datasets:
+        while os.path.exists(os.path.join(BASE_DIR, "realdataopen", f"{data}.lock")) and not\
+                os.path.exists(os.path.join(BASE_DIR, "realdataopen", f"{data}.pkl")):
+            logger.info(f"Computations not finished for {data}, let's wait a bit...")
+            time.sleep(60 * 10)  # wait for 10 minutes
+        try:
+            results_df.append(pd.read_pickle(os.path.join(BASE_DIR, "realdataopen", f"{data}.pkl")))
+        except Exception as e:
+            msg = f"Could not read results for {data}, aborting..."
+            logger.error(msg)
+            raise e
+    results = pd.concat(results_df)
+    results.to_pickle(os.path.join(BASE_DIR, "realdataopen.pkl"))
+    return results
 
 
 def get_from_uci(train: str, test: str = None, **kwargs) -> (pd.DataFrame, pd.DataFrame):
@@ -219,6 +269,7 @@ def run_benchmark(original_train, original_val, original_test, labels_train: np.
 
 
 def run_lrtree(original_train, original_val, original_test, labels_train, labels_val, labels_test, categorical):
+    logger.info("Fitting lrtree.")
     results_lrtree = []
     for class_num in range(3, 10, 2):
         for discretization in [False]:
@@ -328,4 +379,5 @@ def run_other_models(X_train, X_val, X_test, labels_train, labels_val, labels_te
 
 
 if __name__ == "__main__":
-    main()
+    realdataresults = main()
+    print(realdataresults.to_markdown())

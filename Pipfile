@@ -24,6 +24,7 @@ pyinstrument = "*"
 [packages]
 numpy = "*"
 pandas = "*"
+tabulate = "*"
 loguru = "*"
 scikit-learn = ">=1.0"
 tqdm = "*"
