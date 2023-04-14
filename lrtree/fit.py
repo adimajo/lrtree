@@ -259,7 +259,7 @@ def _fit_sem(self, df, X_tree, models, treatment, i=0, stopping_criterion=False)
                 X = train_data.drop(['y', 'c_map', 'c_hat'], axis=1)
                 model = LogRegSegment(penalty='l1', solver=self.solver, C=1e-2, tol=1e-2,
                                       warm_start=True, group=self.group,
-                                      discretization=self.discretization,
+                                      discretize=self.discretize,
                                       column_names=self.column_names,
                                       categorical=self.categorical)
                 logreg = model.fit(X=X, y=y)
@@ -459,7 +459,7 @@ def _init_models(self):
         models[c_iter] = LogRegSegment(penalty='l2', solver=self.solver, C=1e-2, tol=1e-2,
                                        warm_start=True, group=self.group,
                                        categorical=self.categorical,
-                                       discretization=self.discretization,
+                                       discretize=self.discretize,
                                        column_names=self.column_names)
 
     return models

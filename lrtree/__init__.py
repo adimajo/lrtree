@@ -193,7 +193,7 @@ class Lrtree:
                  ratios: tuple = (0.7,),
                  class_num: int = 10,
                  max_iter: int = 100,
-                 discretization: bool = False,
+                 discretize: bool = False,
                  group: bool = False,
                  leaves_as_segment: bool = False,
                  early_stopping=False,
@@ -225,7 +225,7 @@ class Lrtree:
         :param tuple ratios:    The float ratio values for splitting of a dataset in test, validation.
                                 Sum of values should be less than 1. Defaults to (0.7, 0.3)
         :param int class_num:   Number of initial segments. Defaults to 10.
-        :param bool discretization: Whether we want the numerical data to be discretized in each leaf.
+        :param bool discretize: Whether we want the numerical data to be discretized in each leaf.
         :param bool group: Whether we want the categorical data to be merged in each leaf.
         :param bool leaves_as_segment: MAP or leaves-as-segment.
         :param early_stopping: bool (default: False or list of early stopping rules: can be one or several
@@ -261,9 +261,9 @@ class Lrtree:
         self.class_num = class_num
         self.ratios = ratios
         self.group = group
+        self.discretize = discretize
         self.column_names = None
         self.leaves_as_segment = leaves_as_segment
-        self.discretization = discretization
 
         # Init data
         self.train_rows, self.validate_rows, self.test_rows = None, None, None

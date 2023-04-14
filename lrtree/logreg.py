@@ -78,7 +78,7 @@ class LogRegSegment(PossiblyOneClassReg):
         super().__init__()
         self.categories = None
         self.categorical = kwargs.get('categorical', [])
-        self.discretization = kwargs.get('discretization', False)
+        self.discretize = kwargs.get('discretize', False)
         self.group = kwargs.get('group', False)
         self.column_names = kwargs.get('column_names', None)
         self.categories = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
@@ -90,12 +90,12 @@ class LogRegSegment(PossiblyOneClassReg):
         """
         train_data = kwargs.pop("X")
         train_data['y'] = kwargs['y']
-        if self.categorical or self.discretization:
+        if self.categorical or self.discretize:
             train_data, labels, enc, merged_cat, discret_cat, scaler, len_col_num = _categorie_data_bin_train(
                 data=train_data,
                 var_cible="y",
                 categorical=self.categorical,
-                discretize=self.discretization,
+                discretize=self.discretize,
                 group=self.group)
             self.scaler = scaler
             self.categories["enc"] = enc
@@ -114,7 +114,7 @@ class LogRegSegment(PossiblyOneClassReg):
         """
         Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict on sklearn
         """
-        if self.categorical or self.discretization:
+        if self.categorical or self.discretize:
             # Applies the data treatment for this leaf
             # X = X.rename(columns=self.column_names)
             X = _categorie_data_bin_test(data_val=X,
@@ -123,7 +123,7 @@ class LogRegSegment(PossiblyOneClassReg):
                                          merged_cat=self.categories["merged_cat"],
                                          discret_cat=self.categories["discret_cat"],
                                          categorical=self.categorical,
-                                         discretize=self.discretization)
+                                         discretize=self.discretize)
         return super().predict(X.to_numpy())
 
     def predict_proba(self, X: np.ndarray | pd.DataFrame) -> np.ndarray:
@@ -131,7 +131,7 @@ class LogRegSegment(PossiblyOneClassReg):
         Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict_proba
         on sklearn
         """
-        if self.categorical or self.discretization:
+        if self.categorical or self.discretize:
             # Applies the data treatment for this leaf
             X = X.rename(columns=self.column_names)
             X = _categorie_data_bin_test(data_val=X,
@@ -140,5 +140,5 @@ class LogRegSegment(PossiblyOneClassReg):
                                          merged_cat=self.categories["merged_cat"],
                                          discret_cat=self.categories["discret_cat"],
                                          categorical=self.categorical,
-                                         discretize=self.discretization)
+                                         discretize=self.discretize)
         return super().predict_proba(X.to_numpy())
