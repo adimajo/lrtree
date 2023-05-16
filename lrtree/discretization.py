@@ -296,6 +296,8 @@ def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None,
     :param list categorical: list of categorical features' names
     :param bool discretize: whether to discretize continuous features
     """
+    if categorical is None:
+        categorical = []
     X = data.copy()
     to_change = []
     merged_cat = {}
@@ -353,7 +355,7 @@ def _categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None,
 
 
 def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScaler, merged_cat: dict,
-                             discret_cat: dict, categorical=None, discretize=False, group=False) -> pd.DataFrame:
+                             discret_cat: dict, categorical=None, discretize=False) -> pd.DataFrame:
     """
     Data treatment of the test data, using the method (merged categories, discretisation, OneHotEncoder) learned on
     the train data
@@ -391,21 +393,26 @@ def _categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler:
     if to_change:
         assert set(enc.feature_names_in_) == set(to_change)  # nosec
         X_val_cat = enc.transform(X_val[enc.feature_names_in_])
-    X_val_cat = pd.DataFrame(X_val_cat)
+        X_val_cat = pd.DataFrame(X_val_cat)
+        # Need to reset the index for the concat to work well (when not same index)
+        X_val_cat = X_val_cat.reset_index(drop=True)
+    else:
+        X_val_cat = None
 
     X_val_num = X_val.drop(to_change, axis=1)
     for column in X_val_num.columns:
         col = X_val_num[column]
         if col.dtypes not in ("int32", "int64", "float32", "float64"):
             X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
-    # Need to reset the index for the concat to work well (when not same index)
-    X_val_cat = X_val_cat.reset_index(drop=True)
     if not X_val_num.empty:
-        X_val_num_transformed = scaler.transform(X_val_num)
-        X_test = pd.concat([pd.DataFrame(X_val_num_transformed), X_val_cat], axis=1, ignore_index=True)
+        X_test = scaler.transform(X_val_num)
+        if X_val_cat is not None:
+            X_test = pd.concat([pd.DataFrame(X_test), X_val_cat], axis=1, ignore_index=True)
         return X_test
-    else:
+    elif X_val_cat is not None:
         return X_val_cat
+    else:
+        raise ValueError("Empty X_test!")
 
 
 def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
