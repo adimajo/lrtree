@@ -1,7 +1,6 @@
 [![PyPI version](https://badge.fury.io/py/lrtree.svg)](https://badge.fury.io/py/lrtree)
 [![PyPI pyversions](https://img.shields.io/pypi/pyversions/lrtree.svg)](https://pypi.python.org/pypi/lrtree/)
 [![PyPi Downloads](https://img.shields.io/pypi/dm/lrtree)](https://img.shields.io/pypi/dm/lrtree)
-[![Build Status](https://travis-ci.org/adimajo/lrtree.svg?branch=master)](https://travis-ci.org/adimajo/lrtree)
 ![Python package](https://github.com/adimajo/lrtree/workflows/Python%20package/badge.svg)
 [![codecov](https://codecov.io/gh/adimajo/lrtree/branch/master/graph/badge.svg)](https://codecov.io/gh/adimajo/lrtree)
 
@@ -30,7 +29,7 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Prerequisites
 
-This code is supported on Python 3.7, 3.8, 3.9.
+This code is supported on Python 3.10, 3.11, 3.12 and 3.13.
 
 ### Installing the package
 
@@ -39,13 +38,13 @@ This code is supported on Python 3.7, 3.8, 3.9.
 If `git` is installed on your machine, you can use:
 
 ```PowerShell
-pipenv install git+https://github.com/adimajo/lrtree.git
+pip install git+https://github.com/adimajo/lrtree.git
 ```
 
 If `git` is not installed, you can also use:
 
 ```PowerShell
-pipenv install --upgrade https://github.com/adimajo/lrtree/archive/master.tar.gz
+pip install --upgrade https://github.com/adimajo/lrtree/archive/master.tar.gz
 ```
 
 #### Installing through the `pip` command
@@ -58,7 +57,7 @@ pip install lrtree
 
 #### Installation guide for Anaconda
 
-The installation with the `pip` or `pipenv` command **should** work. If not, please raise an issue.
+The installation with the `pip` command **should** work. If not, please raise an issue.
 
 #### For people behind proxy(ies)...
 
@@ -108,39 +107,29 @@ You can clone this project using:
 git clone https://github.com/adimajo/lrtree.git
 ```
 
-You can install all dependencies, including development dependencies, using (note that 
-this command requires `pipenv` which can be installed by typing `pip install pipenv`):
+You can install the package with its development dependencies in a virtual environment using
+[uv](https://docs.astral.sh/uv/) (or plain `python -m venv` and `pip`):
 
-```PowerShell
-pipenv install -d
+```bash
+uv venv .venv && uv pip install -e ".[test,docs,bench]"
 ```
-
-You can build the documentation by going into the `docs` directory and typing `make html`.
-
-You can run the tests by typing `coverage run -m pytest`, which relies on packages 
-[coverage](https://coverage.readthedocs.io/en/coverage-5.2/) and [pytest](https://docs.pytest.org/en/latest/).
-
-To run the tests in different environments (one for each version of Python), install `pyenv` (see [the instructions here](https://github.com/pyenv/pyenv)),
-install all versions you want to test (see [tox.ini](tox.ini)), e.g. with `pyenv install 3.7.0` and run 
-`pipenv run pyenv local 3.7.0 [...]` (and all other versions) followed by `pipenv run tox`.
- 
-## Python Environment 
-The project uses `pipenv`. [An interesting resource](https://realpython.com/pipenv-guide/).
-
-To download all the project dependencies in order to then port them to a machine that had limited access to the internet, you must use the command
-`pipenv lock -r > requirements.txt` which will transform the `Pipfile` into a `requirements.txt`.
-
-## Installation
-To install a virtual environment as well as all the necessary dependencies, you must use the `pipenv install` command for production use 
-or the command `pipenv install -d` for development use.
 
 ## Tests
 
 The tests are based on `pytest` and are stored in the `tests` folder. They can all be launched with the command
-`pytest` in at the root of the project.
-The test coverage can be calculated thanks to the `coverage` package, which is also responsible for launching the tests. 
-The command to use is `coverage run -m pytest`. We can then obtain a graphic summary in the form of an HTML page 
-using the `coverage html` command which creates or updates the `htmlcov` folder from which we can open the `index.html` file.
+`pytest` at the root of the project.
+The test coverage is computed with `coverage run --source lrtree -m pytest`, followed by `coverage report`
+(or `coverage html`, which creates the `htmlcov` folder from which `index.html` can be opened).
+The code is linted with `flake8` (configuration in `.flake8`).
+
+## Documentation
+
+You can build the documentation with `sphinx-build docs/source docs/build/html` (needs the `docs` extra).
+
+## Benchmarks
+
+`benchmarks/` reproduces the benchmark of the R package [glmtree](https://github.com/adimajo/glmtree) in Python,
+see [benchmarks/README.md](benchmarks/README.md).
 
 ## Utilization
 The package provides [sklearn-like](https://scikit-learn.org/stable) interface.
