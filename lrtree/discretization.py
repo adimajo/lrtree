@@ -1,55 +1,14 @@
 import itertools
 from bisect import bisect_right
-from copy import deepcopy
 from math import log
 
 import numpy as np
 import pandas as pd
 from loguru import logger
-from pandas.core.common import flatten
 from scipy.stats import chi2_contingency
 from sklearn import metrics
-from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
-
-
-def bin_data_cate_train(data: pd.DataFrame, var_cible: str, categorical=None):
-    # if categorical is None:
-    #     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-    #                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers",
-    #                    "CRED_Null_Group_bien_fin_Conso",
-    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-    #                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-    #                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
-    #                    "TOP_SEUIL_New_def", "segment", "incident"]
-    X = data.copy()
-    to_change = []
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X.loc[:, column] = X[column].astype(str)
-    for column in X.columns:
-        if column not in categorical and column != var_cible:
-            X.loc[:, column] = X[column].astype(np.float64)
-    if var_cible in X.columns:
-        X.drop([var_cible], axis=1, inplace=True)
-    enc = OneHotEncoder(sparse=False, handle_unknown='ignore')
-    X_cat = enc.fit_transform(X[to_change])
-    X_cat = pd.DataFrame(X_cat)
-    X_num = X.drop(to_change, axis=1)
-    for column in X_num.columns:
-        col = X_num[column]
-        if col.dtypes not in ("int32", "int64", "float32", "float64"):
-            X_num.loc[:, column] = X_num[column].astype(np.int32)
-
-    # Need to reset the index for the concat to work well
-    X_cat = X_cat.reset_index(drop=True)
-    X_num = X_num.reset_index(drop=True)
-
-    X_train = pd.concat([X_num, X_cat], axis=1, ignore_index=True)
-    return X_train, enc
 
 
 def chi2_test(liste):
@@ -85,22 +44,19 @@ def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2) ->
     # We want a minimum of two categories, otherwise the variable becomes useless
     while p_value > seuil and len(np.unique(X_grouped[var])) > 2:
         # Counts the number of 0/1 by modality
-        freq_table = X_grouped.groupby([var, var_predite]).size().reset_index()
+        freq_table = X_grouped.groupby([var, var_predite]).size().reset_index(name=0)
         # All the combinations of values
         liste_paires_modalities = list(itertools.combinations(np.unique(X_grouped[var]), 2))
         # Chi2 between the pairs
-        liste_chi2 = [chi2_test([freq_table.iloc[np.in1d(freq_table[var], pair[0]), 2],
-                                 freq_table.iloc[np.in1d(freq_table[var], pair[1]), 2]]) for pair in
+        liste_chi2 = [chi2_test([freq_table.loc[np.isin(freq_table[var], pair[0]), 0],
+                                 freq_table.loc[np.isin(freq_table[var], pair[1]), 0]]) for pair in
                       liste_paires_modalities]
         p_value = max(liste_chi2)
         if p_value > seuil and len(np.unique(X_grouped[var])) > 1:
             # Updates the modality to the new concatenated value
-            X_grouped[var].iloc[
-                np.in1d(X_grouped[var], liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])] = \
-                liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][0] + ' - ' + \
-                liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))][1]
-            logger.debug(f"Feature {var} - levels merged: "
-                         f"{str(liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))])}")
+            merged_pair = liste_paires_modalities[np.argmax(np.equal(liste_chi2, p_value))]
+            X_grouped.loc[np.isin(X_grouped[var], merged_pair), var] = merged_pair[0] + ' - ' + merged_pair[1]
+            logger.debug(f"Feature {var} - levels merged: {merged_pair}")
         else:
             break
     new_categories = np.unique(X_grouped[var])
@@ -242,7 +198,7 @@ def apply_discretization(X, var, cut_values):
     cut_values = list(np.sort(cut_values))
     cut_values.append(np.inf)
     x = X[var].to_numpy()
-    x_discrete = np.array([1 for _ in range(len(x))])
+    x_discrete = np.ones(len(x), dtype=int)
     logger.debug(f"Feature {var} discretized in {len(cut_values)} bin(s).")
     for index in range(1, len(cut_values)):
         row_filter = (cut_values[index - 1] < x) & (x <= cut_values[index])
@@ -271,21 +227,23 @@ def discretize_feature(X: pd.DataFrame, var: str, var_predite: str):
 
 def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, discretize=True):
     """
-    Binarise the categorical variables (after merging categories)
-    Returns the data, the encoder and the column labels
+    Binarise the categorical variables (after merging categories) and standardise the remaining numerical ones.
+    Returns the data, the column labels, the encoder, the merged categories, the cuts of the discretised
+    features, the scaler and the number of numerical columns left as is
 
     :param pandas.DataFrame data: data with some variables being categorical
     :param str var_cible: name of target
     :param list categorical: list of categorical features' names
     :param bool discretize: whether to discretize continuous features
     """
+    categorical = [] if categorical is None else list(categorical)
     X = data.copy()
     to_change = []
     merged_cat = {}
     for column in categorical:
         if column in X.columns:
             to_change.append(column)
-            X.loc[:, column] = X[column].astype(str)
+            X[column] = X[column].astype(str)
             X, dico = grouping(X, column, var_cible)
             merged_cat[column] = dico
 
@@ -294,36 +252,32 @@ def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, di
         for column in X.columns:
             if column not in categorical and column != var_cible:
                 to_change.append(column)
-                X.loc[:, column] = X[column].astype(np.float64)
+                X[column] = X[column].astype(np.float64)
                 X, binning = discretize_feature(X, column, var_cible)
                 discret_cat[column] = binning
 
     if var_cible in X.columns:
-        X.drop([var_cible], axis=1, inplace=True)
+        X = X.drop(columns=[var_cible])
 
-    enc = OneHotEncoder(sparse=False, handle_unknown='ignore')
-    X_cat = enc.fit_transform(X[to_change])
-    labels_cat = enc.get_feature_names_out()
-    X_cat = pd.DataFrame(X_cat)
+    enc = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+    X_cat = pd.DataFrame(index=range(len(X)))
+    labels_cat = []
+    if to_change:
+        X_cat = pd.DataFrame(enc.fit_transform(X[to_change]))
+        labels_cat = list(enc.get_feature_names_out())
 
     # Used when we had decided to keep the continuous numerical variables
-    X_num = X.drop(to_change, axis=1)
-    col_num = X_num.columns
-    labels_num = []
-    for column in col_num:
-        labels_num.append(column)
-        col = X_num[column]
-        if col.dtypes not in ("int32", "int64", "float32", "float64"):
-            X_num.loc[:, column] = X_num[column].astype(np.int32)
+    X_num = X.drop(columns=to_change)
+    labels_num = list(X_num.columns)
+    for column in labels_num:
+        if not pd.api.types.is_numeric_dtype(X_num[column]):
+            X_num[column] = X_num[column].astype(np.int32)
     scaler = StandardScaler()
-    X_num_transformed = scaler.fit_transform(X_num)
+    X_num_transformed = pd.DataFrame(scaler.fit_transform(X_num)) if labels_num else pd.DataFrame(
+        index=range(len(X)))
 
-    # Need to reset the index for the concat to work well
-    X_cat = X_cat.reset_index(drop=True)
-
-    X_train = pd.concat([pd.DataFrame(X_num_transformed), X_cat], axis=1, ignore_index=True)
-    labels = [*labels_num, *labels_cat]
-    return X_train, labels, enc, merged_cat, discret_cat, scaler, len(col_num)
+    X_train = pd.concat([X_num_transformed, X_cat.reset_index(drop=True)], axis=1, ignore_index=True)
+    return X_train, [*labels_num, *labels_cat], enc, merged_cat, discret_cat, scaler, len(labels_num)
 
 
 def categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScaler, merged_cat: dict,
@@ -345,42 +299,40 @@ def categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: 
     :return: treated data
     :rtype:pandas.DataFrame
     """
-    if not isinstance(categorical, list):
-        categorical = [None]
+    categorical = [] if categorical is None else list(categorical)
     X_val = data_val.copy()
-    to_change = []
-    for column in set(list(merged_cat.keys()) + categorical):
-        if column in X_val.columns:
-            to_change.append(column)
-            X_val.loc[:, column] = X_val[column].astype(str)
+    # Same column order as in training, otherwise the encoder (which checks feature names) complains
+    to_change = [column for column in categorical if column in X_val.columns]
+    for column in to_change:
+        X_val[column] = X_val[column].astype(str)
     # Merging the categories
-    X_val.replace(merged_cat, inplace=True)
+    X_val = X_val.replace(merged_cat)
     if discretize:
-        logger.info("Here")
         for column in X_val.columns:
-            if column not in set(list(merged_cat.keys()) + categorical):
+            if column not in categorical:
                 to_change.append(column)
-                X_val.loc[:, column] = X_val[column].astype(np.float64)
+                X_val[column] = X_val[column].astype(np.float64)
                 X_val = apply_discretization(X_val, column, discret_cat[column])
 
-    X_val_cat = enc.transform(X_val[to_change])
-    X_val_cat = pd.DataFrame(X_val_cat)
+    if to_change:
+        X_val_cat = pd.DataFrame(enc.transform(X_val[to_change]))
+    else:
+        X_val_cat = pd.DataFrame(index=range(len(X_val)))
 
-    X_val_num = X_val.drop(to_change, axis=1)
+    X_val_num = X_val.drop(columns=to_change)
     for column in X_val_num.columns:
-        col = X_val_num[column]
-        if col.dtypes not in ("int32", "int64", "float32", "float64"):
-            X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
-    X_val_num_transformed = scaler.transform(X_val_num)
+        if not pd.api.types.is_numeric_dtype(X_val_num[column]):
+            X_val_num[column] = X_val_num[column].astype(np.int32)
+    if X_val_num.shape[1]:
+        X_val_num = pd.DataFrame(scaler.transform(X_val_num))
+    else:
+        X_val_num = pd.DataFrame(index=range(len(X_val)))
 
     # Need to reset the index for the concat to work well (when not same index)
-    X_val_cat = X_val_cat.reset_index(drop=True)
-    # X_val_num = X_val_num.reset_index(drop=True)
-    X_test = pd.concat([pd.DataFrame(X_val_num_transformed), X_val_cat], axis=1, ignore_index=True)
-    return X_test
+    return pd.concat([X_val_num, X_val_cat.reset_index(drop=True)], axis=1, ignore_index=True)
 
 
-def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
+def create_reduction_matrix(reductions, clustered, labels, chi0, target):
     # Matrix of the changes of chi2 for every pair grouped
     for count1, value1 in enumerate(labels):
         # 0, modality0 ...
@@ -389,7 +341,7 @@ def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
             if count1 != count2:
                 # New matrix once we have merged the two
                 contingency_matrix = metrics.cluster.contingency_matrix(
-                    clustered.replace({value1: value2}, inplace=False), pd)
+                    clustered.replace({value1: value2}), target)
                 # stat chi2, p-value, degree of freedom, expected frequencies
                 g, p, dof, expctd = chi2_contingency(contingency_matrix, lambda_="log-likelihood")
                 reductions[count1, count2] = "{:.2e}".format((1 - g / chi0))
@@ -398,21 +350,21 @@ def create_reduction_matrix(reductions, clustered, labels, chi0, pd):
 
 def update_reduction_matrix(df, var, var_predite, matrix, clustered, ind, chi0):
     # Update reduction matrix after finding the two categories that will impact the least our chi2
-    pd = df[var_predite]
+    target = df[var_predite]
     labels = df[var].unique()
     # Replace the second category by the first in the categorical variable to get the new chi2
-    clustered.replace({labels[ind[1]]: labels[ind[0]]}, inplace=True)
+    clustered = clustered.replace({labels[ind[1]]: labels[ind[0]]})
     # Replace all the values of chi2 related to ind[0] (new index for the merged category)
     for count, value in enumerate(labels):
         contingency_matrix = metrics.cluster.contingency_matrix(
-            clustered.replace({value: labels[ind[0]]}, inplace=False), pd)
+            clustered.replace({value: labels[ind[0]]}), target)
         g, p, dof, expctd = chi2_contingency(contingency_matrix, lambda_="log-likelihood")
         # Fills in (in the good half) the new values
         if count > ind[0]:
             matrix[ind[0], count] = "{:.2e}".format((1 - g / chi0))
         if count < ind[0]:
             matrix[count, ind[0]] = "{:.2e}".format((1 - g / chi0))
-    return matrix
+    return matrix, clustered
 
 
 def green_clust(X: pd.DataFrame, var: str, var_predite: str, num_clusters: int) -> (pd.DataFrame, dict):
@@ -437,17 +389,17 @@ def green_clust(X: pd.DataFrame, var: str, var_predite: str, num_clusters: int) 
     # Square matrix (each line/column = a category), each cell represents the impact on chi2 if we merge the row &
     # column categories
     reductions = np.empty((len(labels), len(labels)))
-    reductions[:] = np.NaN
+    reductions[:] = np.nan
     # List of index of categories merged to another category, then ignored in the reduction matrix
     forgotten_rows = []
-    pd = df[var_predite]
+    target = df[var_predite]
     clusters = [*range(0, len(labels), 1)]
     # Clusters is a list of lists that will contain the new groups
     clusters = [[i] for i in clusters]
-    contingency_matrix = metrics.cluster.contingency_matrix(df[var], pd)
+    contingency_matrix = metrics.cluster.contingency_matrix(df[var], target)
     # Get the inital chi2 for the impact of grouping modalities
     chi0, p, dof, expctd = chi2_contingency(contingency_matrix, lambda_="log-likelihood")
-    reductions = create_reduction_matrix(reductions, clustered, labels, chi0, pd)
+    reductions = create_reduction_matrix(reductions, clustered, labels, chi0, target)
     # keep merging until we reach the number of desired groups
     while len(clusters) > num_clusters:
         # Get the minimum chi2 indices in the reduction matrix without taking into account the forgotten rows
@@ -457,10 +409,10 @@ def green_clust(X: pd.DataFrame, var: str, var_predite: str, num_clusters: int) 
         # For the indices of the min chi2, add the second index to forgetten rows (ind[1] now be ind[0]
         forgotten_rows.append(ind[1])
         # update the values of chi2 in the reduction matrix after merging the indices in the clustered column
-        reductions = update_reduction_matrix(df, var, var_predite, reductions, clustered, ind, chi0)
+        reductions, clustered = update_reduction_matrix(df, var, var_predite, reductions, clustered, ind, chi0)
         # And finally merging them in the clusters variable
-        cluster1 = list(flatten([sublist for sublist in clusters if ind[0] in sublist]))
-        cluster2 = list(flatten([sublist for sublist in clusters if ind[1] in sublist]))
+        cluster1 = next(sublist for sublist in clusters if ind[0] in sublist)
+        cluster2 = next(sublist for sublist in clusters if ind[1] in sublist)
         clusters.remove(cluster1)
         clusters.remove(cluster2)
         clusters += [cluster1 + cluster2]
@@ -474,224 +426,57 @@ def green_clust(X: pd.DataFrame, var: str, var_predite: str, num_clusters: int) 
         for ind in group:
             dico_regroupement[labels[ind]] = name_cluster
 
-    df.replace({var: dico_regroupement}, inplace=True)
+    df = df.replace({var: dico_regroupement})
     return df, dico_regroupement
 
 
-def categorie_data_labels(data: pd.DataFrame, data_val: pd.DataFrame, categorical=None) -> (pd.DataFrame, pd.DataFrame):
-    # if categorical is None:
-    #     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-    #                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers",
-    #                    "CRED_Null_Group_bien_fin_Conso",
-    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-    #                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-    #                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
-    #                    "TOP_SEUIL_New_def", "segment", "incident"]
-    X = data.copy()
-    X_val = data_val.copy()
-    to_change = []
-    X_cat = []
-    X_val_cat = []
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X[column] = X[column].astype(str)
-            X_val[column] = X_val[column].astype(str)
-            enc = LabelEncoder()
-            X_val_cat.append(enc.transform(X_val[column]))
-            X_cat.append(enc.fit_transform(X[column]))
-
-    X_cat = pd.DataFrame(X_cat)
-    X_val_cat = pd.DataFrame(X_val_cat)
-
-    X_num = X.drop(to_change, axis=1)
-    if "Defaut_12_Mois_contagion" in X_num.columns:
-        X_num.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
-    X_val_num = X_val.drop(to_change, axis=1)
-    if "Defaut_12_Mois_contagion" in X_val_num.columns:
-        X_val_num.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
-
-    for column in X_num.columns:
-        col = X_num[column]
-        if col.dtypes not in ("int32", "int64", "float32", "float64"):
-            X_num[column] = col.astype(np.int32)
-            X_val_num[column] = col.astype(np.int32)
-
-    return pd.concat([X_num, X_cat], axis=1), pd.concat([X_val_num, X_val_cat], axis=1)
+_SENTINEL_VALUES = [99999, 99999.99, 999999.0, 9.999999999999E10, 99999999999.99, 999, 'NR']
+# Columns / target of the in-house credit datasets the scripts in ``scripts/`` were written for
+_LEGACY_DROPPED = ["Defaut_12_Mois_contagion"]
+_LEGACY_BINARY_FLAGS = [
+    "DAV_Null_INDIC_TIERS_CONTENTIEUX", "DAV_Null_INDIC_TIERS_NEIERTZ", "DAV_Null_INDIC_PERS_FICP",
+    "DAV_Null_PERS_SAISIE_ATTRIB", "DAV_Null_INDIC_PERS_TUTELLE", "DAV_Null_INDIC_PERS_CURATELLE",
+    "DAV_Null_INDIC_PERS_NEIERTZ", "DAV_Null_INDIC_PERS_REDRST_JUDIC", "DAV_Null_INDIC_PERS_CONSTIT_STE",
+    "DAV_Null_INDIC_PERS_LIQUID_JUDIC"]
 
 
-def categorie_data_bin_train_test(data: pd.DataFrame, data_val: pd.DataFrame, categorical=None) -> (pd.DataFrame, pd.DataFrame, list):
-    # if categorical is None:
-    #     categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-    #                    "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-    #                    "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers",
-    #                    "CRED_Null_Group_bien_fin_Conso",
-    #                    "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-    #                    "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-    #                    "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
-    #                    "TOP_SEUIL_New_def", "segment", "incident"]
-    X = data.copy()
-    X_val = data_val.copy()
-    to_change = []
-    for column in categorical:
-        if column in X.columns:
-            to_change.append(column)
-            X[column] = X[column].astype(str)
-            X_val[column] = X_val[column].astype(str)
-    enc = OneHotEncoder(drop='first', sparse=False, handle_unknown='ignore')
-    X_cat = enc.fit_transform(deepcopy(X[to_change]))
-    X_val_cat = enc.transform(deepcopy(X_val[to_change]))
-    labels_cat = enc.get_feature_names_out()
-
-    X_cat = pd.DataFrame(X_cat)
-    X_val_cat = pd.DataFrame(X_val_cat)
-
-    X_num = X.drop(to_change, axis=1)
-    if "Defaut_12_Mois_contagion" in X_num.columns:
-        X_num.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
-    col_num = X_num.columns
-    labels_num = []
-    for column in col_num:
-        labels_num.append(column)
-    X_val_num = X_val.drop(to_change, axis=1)
-    if "Defaut_12_Mois_contagion" in X_val_num.columns:
-        X_val_num.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
-
-    for column in X_num.columns:
-        col = X_num[column]
-        if col.dtypes not in ["int32", "int64", "float32", "float64"]:
-            X_num[column] = X_num[column].astype(np.int32)
-            X_val_num[column] = X_val_num[column].astype(np.int32)
-
-    # Need to reset the index for the concat to work well (when not same index)
-    X_cat = X_cat.reset_index(drop=True)
-    X_val_cat = X_val_cat.reset_index(drop=True)
-    X_num = X_num.reset_index(drop=True)
-    X_val_num = X_val_num.reset_index(drop=True)
-
-    X_train = pd.concat([X_num, X_cat], axis=1, ignore_index=True)
-    X_test = pd.concat([X_val_num, X_val_cat], axis=1, ignore_index=True)
-    labels = [*labels_num, *labels_cat]
-    return X_train, X_test, labels
-
-
-def bin_data_cate_test(data_val, enc, categorical):
-    X_val = data_val.copy()
-    # categorical = ["Categ_NAF_Pro_Agri", "CRED_Null_Regroup_CATEG_REV", "CRED_Null_Regroup_CATEG_CONSO",
-    #                "CRED_Null_Regroup_CATEG_HAB", "CRED_Null_Regroup_CATEG_PRET", "CRED_Null_Group_Dest_fin_Conso",
-    #                "CRED_Null_Group_Dest_fin_Hab", "CRED_Null_Group_Dest_fin_tiers", "CRED_Null_Group_bien_fin_Conso",
-    #                "CRED_Null_Group_bien_fin_Hab", "CRED_Null_Group_bien_fin_tiers", "CRED_Null_Group_interv_Conso",
-    #                "CRED_Null_Group_interv_Hab", "CRED_Null_Group_interv_tiers", "regroup_categ_juridique",
-    #                "Regroup_CSP_Initiale", "REGIME_MATRIMONIAL", "CAPACITE_JURIDIQUE", "Type_Option",
-    #                "TOP_SEUIL_New_def", "segment", "incident"]
-    to_change = []
-    for column in categorical:
-        if column in X_val.columns:
-            to_change.append(column)
-            X_val.loc[:, column] = X_val[column].astype(str)
-
-    for column in X_val.columns:
-        if column not in categorical:
-            X_val.loc[:, column] = X_val[column].astype(np.float64)
-
-    X_val_cat = enc.transform(X_val[to_change])
-    X_val_cat = pd.DataFrame(X_val_cat)
-
-    X_val_num = X_val.drop(to_change, axis=1)
-    for column in X_val_num.columns:
-        col = X_val_num[column]
-        if col.dtypes not in ("int32", "int64", "float32", "float64"):
-            X_val_num.loc[:, column] = X_val_num[column].astype(np.int32)
-
-    # Need to reset the index for the concat to work well (when not same index)
-    X_val_cat = X_val_cat.reset_index(drop=True)
-    X_val_num = X_val_num.reset_index(drop=True)
-    X_test = pd.concat([X_val_num, X_val_cat], axis=1, ignore_index=True)
-    return X_test
-
-
-def extreme_values(data: pd.DataFrame, missing: bool = False) -> pd.DataFrame:
+def extreme_values(data: pd.DataFrame, missing: bool = False, legacy_schema: bool = False) -> pd.DataFrame:
     """
-    Deals with extreme values (ex : NaN, or not filled)
+    Deals with extreme values (ex : NaN, or not filled): sentinel values (99999, 999, 'NR'...) become missing and
+    missing values become 0 (or a "missing" level for non numerical columns).
     Creates (or not) a column signaling which values were missing
 
     :param pandas.DataFrame data: data to clean
     :param bool missing: whether or not to create a column signaling missing values
+    :param bool legacy_schema: also recode the binary flags of the in-house credit datasets
     :rtype: pandas.DataFrame
     """
-    # Valeurs extremes quand valeurs manquantes
-    extremes = [99999, 99999.99, 999999.0, 9.999999999999E10, 99999999999.99, 999, 'NR']
-    for column in data.columns:
-        data[column].replace(to_replace=extremes, value=np.NaN, inplace=True)
+    data = data.replace(to_replace=_SENTINEL_VALUES, value=np.nan)
 
     if missing:
         # Creation de colonnes de variables présentes/absentes
-        for column in data.columns:
+        for column in list(data.columns):
             values = data[column]
-            if None in values or pd.isna(values).any():
-                new_column_name = "Exists_" + str(column)
-                new_column = []
-                for i in range(len(data)):
-                    if values.iloc[i] is None or pd.isna(values.iloc[i]):
-                        new_column.append(0)
-                    else:
-                        new_column.append(1)
-                data.insert(0, new_column_name, new_column)
+            if values.isna().any():
+                data.insert(0, "Exists_" + str(column), (~values.isna()).astype(int).to_numpy())
 
-    for column in data.columns:
-        data.loc[:, column] = data[column].fillna(value=0)
+    # Missing numerical values become 0, missing levels of categorical features a level of their own
+    numerical = [column for column in data.columns if pd.api.types.is_numeric_dtype(data[column])]
+    data = data.fillna({column: 0 if column in numerical else "missing" for column in data.columns})
 
-    dav_null = ["DAV_Null_INDIC_TIERS_CONTENTIEUX", "DAV_Null_INDIC_TIERS_NEIERTZ", "DAV_Null_INDIC_PERS_FICP",
-                "DAV_Null_PERS_SAISIE_ATTRIB",
-                "DAV_Null_INDIC_PERS_TUTELLE", "DAV_Null_INDIC_PERS_CURATELLE", "DAV_Null_INDIC_PERS_NEIERTZ",
-                "DAV_Null_INDIC_PERS_REDRST_JUDIC", "DAV_Null_INDIC_PERS_CONSTIT_STE",
-                "DAV_Null_INDIC_PERS_LIQUID_JUDIC"]
-    for column in dav_null:
-        if column in data.columns:
-            data[column].replace(['0', '1'], [0, 1], inplace=True)
+    if legacy_schema:
+        flags = [column for column in _LEGACY_BINARY_FLAGS if column in data.columns]
+        data = data.replace({column: {'0': 0, '1': 1} for column in flags})
 
     return data
 
 
-def traitement_train_val(X: pd.DataFrame, X_val: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame, list):
-    """
-    Traite les données et les données de test en gérant les valeurs extremes, les variables catégoriques et en
-    normalisant
-    Retourne les données traitées et les labels des colonnes
-
-    :param pandas.DataFrame X:
-        Data with some variables being categorical
-    :param pandas.DataFrame X_val:
-        Validation data with some variables being categorical
-    :return: les données traitées et les labels des colonnes
-    :rtype: tuple
-    """
-    X = extreme_values(X, missing=False)
-    X_val = extreme_values(X_val, missing=False)
-
-    X_train, X_test, labels = categorie_data_bin_train_test(X, X_val)
-
-    # Vérifie qu'on a bien les mêmes colonnes dans les données train / test
-    for column in X_train.columns:
-        if column not in X_test.columns:
-            X_train = X_train.drop(column, axis=1)
-    for column in X_test.columns:
-        if column not in X_train.columns:
-            X_test = X_test.drop(column, axis=1)
-
-    # Normalisation
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-    return X_train, X_test, labels
-
-
 def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScaler, merged_cat: dict,
-                   discret_cat: dict, categorical: list, discretize: bool) -> pd.DataFrame:
+                   discret_cat: dict, categorical: list, discretize: bool, clean_extremes: bool = False,
+                   legacy_schema: bool = False) -> pd.DataFrame:
     """
-    Traite les données de test en gérant les valeurs extremes, les variables catégoriques et en normalisant
-    Retourne les données traitées
+    Applies to new data the treatment (extreme values, categorical variables, normalisation) learned by
+    :func:`traitement_train`
 
     :param pandas.Dataframe data:
         Data with some variables being categorical
@@ -703,36 +488,42 @@ def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScale
         Merged categories for each column
     :param dict discret_cat:
         Binning for the discretisation for each column
+    :param list categorical: list of categorical features' names
     :param bool discretize:
         Whether numerical features were discretized
-    :return: les données traitées
+    :param bool clean_extremes: whether to replace sentinel values (see :func:`extreme_values`)
+    :param bool legacy_schema: drop / recode the columns specific to the in-house credit datasets
+    :return: the treated data
     :rtype: pandas.DataFrame
     """
     X_val = data.copy()
-    if "Defaut_12_Mois_contagion" in X_val.columns:
-        X_val.drop(["Defaut_12_Mois_contagion"], axis=1, inplace=True)
-    X_val = extreme_values(X_val, missing=False)
-    X_val = categorie_data_bin_test(X_val, enc, scaler,
-                                    merged_cat, discret_cat,
-                                    categorical, discretize)
-    return X_val
+    if legacy_schema:
+        X_val = X_val.drop(columns=[column for column in _LEGACY_DROPPED if column in X_val.columns])
+    if clean_extremes:
+        X_val = extreme_values(X_val, missing=False, legacy_schema=legacy_schema)
+    return categorie_data_bin_test(X_val, enc, scaler, merged_cat, discret_cat, categorical, discretize)
 
 
-def traitement_train(data: pd.DataFrame, target: str, categorical=None, discretize=False) -> tuple:
+def traitement_train(data: pd.DataFrame, target: str, categorical=None, discretize=False,
+                     clean_extremes: bool = False, legacy_schema: bool = False) -> tuple:
     """
-    Traite les données en gérant les valeurs extremes, les variables catégoriques et en normalisant
+    Treats the training data (extreme values, categorical variables, normalisation)
 
     :param pandas.Dataframe data: data with some variables being categorical
     :param str target: variable cible
     :param list categorical: list of categorical features' names
     :param bool discretize: whether to discretize continuous features
-    :return: processed data, labels of columns, encoder for categorical data and scaler for numerical data
+    :param bool clean_extremes: whether to replace sentinel values (see :func:`extreme_values`)
+    :param bool legacy_schema: recode the target / flags specific to the in-house credit datasets
+    :return: processed data, labels of columns, encoder for categorical data, scaler for numerical data, merged
+        categories, discretisation cuts and number of numerical columns
     :rtype: tuple
     """
     X = data.copy()
-    if target in X.columns and X[target].dtypes == "object":
-        X[target].replace(["N", "O"], [int(0), int(1)], inplace=True)
-    X = extreme_values(X, missing=False)
+    if legacy_schema and target in X.columns and X[target].dtype == "object":
+        X[target] = X[target].replace({"N": 0, "O": 1})
+    if clean_extremes:
+        X = extreme_values(X, missing=False, legacy_schema=legacy_schema)
     X, labels, enc, merged_cat, discrete_cat, scaler, len_col_num = categorie_data_bin_train(
         X,
         var_cible=target,
@@ -742,17 +533,28 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
 
 
 class Processing:
-    def __init__(self, target: str, discretize: bool = False, merge_threshold: float = 0.2):
+    """
+    Treatment of the features of a segment: merging of the levels of categorical features, discretisation of the
+    numerical ones (optional), one-hot encoding and standardisation.
+
+    :param str target: name of the target column
+    :param bool discretize: whether to discretise numerical features (MDLP) before one-hot encoding them
+    :param float merge_threshold: p-value over which the levels of a categorical feature are merged
+    :param bool clean_extremes: whether to replace sentinel values (99999, 999...) by 0
+    """
+    def __init__(self, target: str, discretize: bool = False, merge_threshold: float = 0.2,
+                 clean_extremes: bool = False):
         self.target = target
         self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat = [None] * 5
         self.discretize = discretize
         self.num_cols = []
         self.cat_cols = []
         self.merge_threshold = merge_threshold
+        self.clean_extremes = clean_extremes
         self.X_train = None
 
-    def fit(self, X: pd.DataFrame, categorical: list):
-        self.cat_cols = categorical
+    def fit(self, X: pd.DataFrame, categorical: list = None):
+        self.cat_cols = [] if categorical is None else list(categorical)
         # Check if all categorical are inside
         for col in self.cat_cols:
             if col not in X.columns:
@@ -763,19 +565,22 @@ class Processing:
         self.num_cols = [col for col in X.columns.to_list() if col not in self.cat_cols + [self.target]]
         # Application sur train
         X, self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat, len_col_num = traitement_train(
-            data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize
+            data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize,
+            clean_extremes=self.clean_extremes
         )
-        assert len_col_num == len(self.num_cols)
+        if len_col_num != len(self.num_cols) - (len(self.discrete_cat) if self.discretize else 0):
+            raise ValueError("Inconsistent number of numerical columns after treatment.")
         self.X_train = X
+        return self
 
-    def fit_transform(self, X: pd.DataFrame, categorical: list):
-        self.fit(X, categorical)
-        return self.X_train
+    def fit_transform(self, X: pd.DataFrame, categorical: list = None):
+        return self.fit(X, categorical).X_train
 
     def transform(self, X: pd.DataFrame):
         X_test = X.copy()
         if self.target in X_test.columns.to_list():
-            del X_test[self.target]
+            X_test = X_test.drop(columns=[self.target])
         return traitement_val(data=X_test, enc=self.enc, scaler=self.scaler,
                               merged_cat=self.merged_cat, discret_cat=self.discrete_cat,
-                              categorical=self.cat_cols, discretize=self.discretize)
+                              categorical=self.cat_cols, discretize=self.discretize,
+                              clean_extremes=self.clean_extremes)
