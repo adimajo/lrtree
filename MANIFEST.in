@@ -1,14 +1,16 @@
 # Include the license file
 include LICENSE
 include README.md
-include *.txt
-exclude *.git
 
 # Include the package
-recursive-include glmdisc *
+recursive-include lrtree *
 
 # Exclude the docs
 recursive-exclude docs *
+
+# Exclude the benchmarks and the scripts
+recursive-exclude benchmarks *
+recursive-exclude scripts *
 
 # Include the tests
 recursive-include tests *

@@ -53,16 +53,16 @@ def get_cacf_data():
 
 if __name__ == "__main__":
     data, data_train, data_val, y_train, y_val, common, used, cate = get_cacf_data()
-    processing = Processing(target="cible")
+    processing = Processing(target="cible", clean_extremes=True)
     X_train = processing.fit_transform(X=data_train[used + ["cible"]], categorical=cate)
     X_test = processing.transform(data_val)
 
     model = Lrtree(criterion="gini", algo='SEM', class_num=8,
-                   max_iter=200, validation=True, data_treatment=False)
+                   max_iter=200, validation=True)
     model.fit(X=X_train, y=y_train, optimal_size=True, tree_depth=3)
 
     # model = _fit_parallelized(X_train, y_train, criterion="gini", algo='SEM', nb_init=8, tree_depth=3, class_num=8,
-    #                           max_iter=200, validation=True, data_treatment=False, optimal_size=True)
+    #                           max_iter=200, validation=True, optimal_size=True)
 
     tree.plot_tree(model.best_link, feature_names=processing.labels)
     plt.show()
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     for seg in np.unique(data["grscor2"]):
         logger.info(seg)
         sub_data = data[data["grscor2"] == seg]
-        X_test = traitement_val(sub_data[used], enc, scaler, merged_cat, discret_cat)
+        X_test = processing.transform(sub_data[used])
         y_test = sub_data['cible'].to_numpy()
         y_proba = model.predict_proba(X_test)
         logger.info(f"SEM: {roc_auc_score(y_test, y_proba)}")
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     y_total_proba = []
     for base in [data_gd, data_cc, data_edm, data_instit, data_auto, data_crca, data_lcl]:
         sub_base = cacf_data(base[common])
-        X_test = traitement_val(sub_base[used], enc, scaler, merged_cat, discret_cat)
+        X_test = processing.transform(sub_base[used])
         y_test = sub_base['cible'].to_numpy()
         y_proba = model.predict_proba(X_test)
         logger.info(f"SEM: {roc_auc_score(y_test, y_proba)}")

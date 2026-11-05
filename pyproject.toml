@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lrtree"
+dynamic = ["version"]
+description = "lrtree: logistic regression trees"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Adrien Ehrhardt"},
+    {name = "Dmitry Gaynullin"},
+    {name = "Elise Bayraktar"},
+]
+keywords = ["logistic regression", "decision tree", "scoring", "stochastic EM"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "joblib",
+    "loguru",
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "scikit-learn>=1.4",
+    "scipy>=1.11",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+test = ["bandit", "coverage", "flake8", "pytest"]
+docs = ["myst-parser", "numpydoc", "sphinx", "sphinx-rtd-theme"]
+bench = ["matplotlib"]
+scripts = ["kaggle", "matplotlib", "tabulate", "tikzplotlib"]
+
+[project.scripts]
+lrtree-consistency = "lrtree._command_line.consistency:main"
+lrtree-realdata = "lrtree._command_line.realdataopen:main"
+
+[project.urls]
+Homepage = "https://adimajo.github.io/lrtree"
+Source = "https://github.com/adimajo/lrtree"
+Issues = "https://github.com/adimajo/lrtree/issues"
+
+[tool.setuptools.dynamic]
+version = {attr = "lrtree.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["lrtree*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# the benchmarks are importable from the tests
+pythonpath = ["."]
+# deprecations that NumPy / pandas / scikit-learn have turned, or will turn, into errors
+filterwarnings = [
+    "error::DeprecationWarning",
+    "error::FutureWarning",
+    "error:.in1d. is deprecated:DeprecationWarning",
+]

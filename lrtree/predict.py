@@ -1,54 +1,32 @@
 """
 Predict, predict_proba and precision methods for the Lrtree class
 """
-import pandas as pd
 import numpy as np
-from copy import deepcopy
-from lrtree.discretization import bin_data_cate_test
+
+from lrtree.fit import _model_features, _segments, _tree_features
 
 
 def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
     self._check_is_fitted()
-    # List of models for each class
-    link = self.best_link
-    logreg = self.best_logreg
-    # Predicted class for each sample
-    if not link:
-        liste_cla = [0]
-        classes = np.zeros(len(X))
-    else:
-        if self.categorical:
-            enc_global = self.best_treatment["global"]
-            classes = link.predict(bin_data_cate_test(
-                data_val=X, enc=enc_global, categorical=self.categorical))
-        else:
-            classes = link.predict(X)
-        # Classes that were predicted : c_map
-        liste_cla = np.unique(classes)
+    # Features are used positionally, as when fitting
+    X_tree = _tree_features(self, X)
+    X = _model_features(self, X)
+    # Predicted segment (c_map) of each sample
+    classes = _segments(self.best_link, X_tree, self.leaves_as_segment)
 
-    X_df = pd.DataFrame(X).copy()
-    if not isinstance(X, pd.DataFrame):
-        X_df = X_df.add_prefix("par_")
-
-    X_df["class"] = classes
-    X_df["pred"] = 0
-    for i in range(len(liste_cla)):
-        filtre = X_df["class"] == liste_cla[i]
-        bloc = deepcopy(X_df[filtre].drop(["class", "pred"], axis=1))
+    prediction = np.empty(X.shape[0])
+    for label in np.unique(classes):
+        in_segment = classes == label
+        # A segment with no training observation has no regression of its own
+        model = self.best_logreg.get(label, self.global_logreg)
         if fun == "predict":
-            bloc_pred = logreg[i].predict(bloc)
+            prediction[in_segment] = model.predict(X[in_segment])
         else:
-            bloc_pred = logreg[i].predict_proba(bloc)
-        k = 0
-        for j in range(len(X_df)):
-            if filtre[j]:
-                if fun == "predict":
-                    X_df.loc[j, "pred"] = bloc_pred[k]
-                else:
-                    X_df.loc[j, "pred"] = bloc_pred[k][1]
-                k = k + 1
-
-    return X_df["pred"].to_numpy()
+            prediction[in_segment] = model.predict_proba(X[in_segment])[:, 1]
+    if fun == "predict":
+        # Back to the labels given when fitting
+        return self.classes_[prediction.astype(int)]
+    return prediction
 
 
 def predict(self, X: np.ndarray) -> np.ndarray:
@@ -95,5 +73,4 @@ def precision(self, X_test: np.ndarray, y_test: np.ndarray) -> float:
         raise ValueError(msg)
 
     prediction = self.predict(X_test)
-    diff = np.count_nonzero(prediction - y_test)
-    return 1 - diff / len(X_test)
+    return float(np.mean(prediction == np.asarray(y_test)))

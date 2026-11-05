@@ -86,22 +86,18 @@ def test_early_stopping():
 
 
 def test_gini_penalized(caplog):
-    lrtree.Lrtree(validation=False,
-                    test=True,
-                    criterion="gini")
+    lrtree.Lrtree(validation=False, test=True, criterion="gini")
     assert caplog.records[0].message == "Using Gini index on training set might yield an overfitted model."
 
 
 def test_validation_criterion(caplog):
-    lrtree.Lrtree(validation=True,
-                    criterion="aic")
+    lrtree.Lrtree(validation=True, criterion="aic")
 
     assert caplog.records[0].message == ("No need to penalize the log-likelihood when a validation set is used. Using "
                                          "log-likelihood "
                                          "instead of AIC/BIC.")
 
-    lrtree.Lrtree(validation=True,
-                    criterion="bic")
+    lrtree.Lrtree(validation=True, criterion="bic")
 
     assert caplog.records[0].message == (
         "No need to penalize the log-likelihood when a validation set is used. Using log-likelihood "

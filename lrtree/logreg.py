@@ -1,144 +1,119 @@
 """
-implements segment-specific, possibly single-class, logistic regression
-
-.. autoclass:: PossiblyOneClassReg
-   :members:
-
-.. autoclass:: LogRegSegment
-   :members:
+Logistic regressions used inside the segments of an Lrtree
 """
-from __future__ import annotations
 import inspect
 
 import numpy as np
 import pandas as pd
-import sklearn as sk
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LogisticRegression
 
-from lrtree.discretization import _categorie_data_bin_test
-from lrtree.discretization import _categorie_data_bin_train
+from lrtree.discretization import Processing, as_categories
+
+# Parameters of the parent class, computed once: scikit-learn re-inspects the signature of ``__init__`` on every
+# ``get_params`` call (hence on every ``repr`` / ``clone``)
+_LOGREG_PARAMS = tuple(sorted(set(inspect.signature(LogisticRegression.__init__).parameters) - {"self"}))
 
 
-class PossiblyOneClassReg(sk.linear_model.LogisticRegression):
+class PossiblyOneClassReg(LogisticRegression):
     """
-    One class logistic regression (e.g. when a leaf is pure)
+    Logistic regression that also accepts a single class in the training labels (e.g. when a leaf is pure): the
+    prediction is then that class, with probability 1.
     """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._single_class_label = None
-        self.n_features_in_ = None
+    _single_class_label = None
 
-    def fit(self, X: np.ndarray | pd.DataFrame, y: np.ndarray, weights: np.ndarray = None):
+    def fit(self, X, y, sample_weight=None):
         """
-        Fit the one class regression: put the label of the single class and the number of features
+        Fit the regression, or remember the label of the single class and the number of features
         """
-        if y.nunique() == 1:
-            self._single_class_label = y.iloc[0]
-            self.n_features_in_ = X.shape[1]
+        y = np.asarray(y)
+        if np.unique(y).size == 1:
+            self._single_class_label = y[0]
+            self.n_features_in_ = np.shape(X)[1]
             return self
-        else:
-            return super().fit(X, y, weights)
+        # A segment that was pure at the previous fit is not anymore
+        self._single_class_label = None
+        return super().fit(X, y, sample_weight)
 
-    def predict(self, X: np.ndarray | pd.DataFrame) -> np.ndarray:
+    def predict(self, X):
         """
-        Predict the single class if there's only one class, or predicts
-
-        :param numpy.ndarray or pandas.DataFrame X:
-        :returns: column of class prediction
-        :rtype: numpy.ndarray
+        Predict the single class if there is one
         """
         if self._single_class_label is not None:
-            return np.full(X.shape[0], self._single_class_label)
-        else:
-            return super().predict(X)
+            return np.full(np.shape(X)[0], self._single_class_label)
+        return super().predict(X)
 
-    def predict_proba(self, X: np.ndarray | pd.DataFrame):
+    def predict_proba(self, X):
         """
-        Predict the single class with a 1 probability
-
-        :param numpy.ndarray or pandas.DataFrame X:
-        :returns: two columns, one of which full of ones
-        :rtype: numpy.ndarray
+        Predict the single class with a 1 probability if there is one
         """
         if self._single_class_label is not None:
-            if self._single_class_label == 1:
-                return np.full((X.shape[0], 2), [0, 1])
-            else:
-                return np.full((X.shape[0], 2), [1, 0])
-        else:
-            return super().predict_proba(X)
+            proba = np.zeros((np.shape(X)[0], 2))
+            proba[:, int(self._single_class_label == 1)] = 1.0
+            return proba
+        return super().predict_proba(X)
 
 
 class LogRegSegment(PossiblyOneClassReg):
     """
-    Logistic Regression for a given segment; fine-tuned PossiblyOneClassReg, itself from sklearn.LogisticRegression,
-    allowing (1) to have only one class and (2) to embed data processing (merging, discretization).
+    Logistic regression of one segment. All keyword arguments but the first four are those of
+    :class:`sklearn.linear_model.LogisticRegression`.
+
+    When the features have to be treated inside the segment (categorical features, discretisation or merging of
+    levels), the regression takes the features as a 2-d array whose columns are in the order of ``column_names`` and
+    treats them with a :class:`lrtree.discretization.Processing` fitted on the segment.
+
+    :param bool discretize: whether to discretise the numerical features inside the segment
+    :param bool group: whether to merge the levels of the categorical features inside the segment
+    :param list categorical: names of the categorical features
+    :param list column_names: names of the columns of the features (needed to find the categorical ones)
     """
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.categories = None
-        self.categorical = kwargs.get('categorical', [])
-        self.discretize = kwargs.get('discretize', False)
-        self.group = kwargs.get('group', False)
-        self.column_names = kwargs.get('column_names', None)
-        self.categories = {"enc": OneHotEncoder(), "merged_cat": {}, "discret_cat": {}}
-        self.scaler = None
 
-    def fit(self, **kwargs):
-        """
-        Fits the LogRegSegment by preprocessing the data (if need be / asked for) and calling fit on sklearn
-        """
-        train_data = kwargs.pop("X")
-        train_data['y'] = kwargs['y']
-        if self.categorical or self.discretize:
-            train_data, labels, enc, merged_cat, discret_cat, scaler, len_col_num = _categorie_data_bin_train(
-                data=train_data,
-                var_cible="y",
-                categorical=self.categorical,
-                discretize=self.discretize,
-                group=self.group)
-            self.scaler = scaler
-            self.categories["enc"] = enc
-            self.categories["merged_cat"] = merged_cat
-            self.categories["discret_cat"] = discret_cat
-        else:
-            try:
-                train_data.drop(columns="y", inplace=True)
-            except KeyError:
-                pass
-        super_fit_args = list(inspect.signature(super().fit).parameters)
-        kwargs_fit = {k: kwargs.pop(k) for k in dict(kwargs) if k in super_fit_args}
-        return super().fit(X=train_data, **kwargs_fit)
+    def __init__(self, discretize: bool = False, group: bool = False, categorical=None, column_names=None,
+                 **kwargs):
+        unknown = set(kwargs) - set(_LOGREG_PARAMS)
+        if unknown:
+            raise TypeError(f"Unexpected keyword argument(s) {sorted(unknown)}")
+        super().__init__(**kwargs)
+        self.discretize = discretize
+        self.group = group
+        self.categorical = categorical
+        self.column_names = column_names
+        self.processing = None
 
-    def predict(self, X: np.ndarray | pd.DataFrame) -> np.ndarray:
-        """
-        Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict on sklearn
-        """
-        if self.categorical or self.discretize:
-            # Applies the data treatment for this leaf
-            # X = X.rename(columns=self.column_names)
-            X = _categorie_data_bin_test(data_val=X,
-                                         enc=self.categories["enc"],
-                                         scaler=self.scaler,
-                                         merged_cat=self.categories["merged_cat"],
-                                         discret_cat=self.categories["discret_cat"],
-                                         categorical=self.categorical,
-                                         discretize=self.discretize)
-        return super().predict(X.to_numpy())
+    @classmethod
+    def _get_param_names(cls):
+        return [*_LOGREG_PARAMS, "discretize", "group", "categorical", "column_names"]
 
-    def predict_proba(self, X: np.ndarray | pd.DataFrame) -> np.ndarray:
-        """
-        Predicts the LogRegSegment by preprocessing the data (if need be / asked for) and calling predict_proba
-        on sklearn
-        """
-        if self.categorical or self.discretize:
-            # Applies the data treatment for this leaf
-            X = X.rename(columns=self.column_names)
-            X = _categorie_data_bin_test(data_val=X,
-                                         enc=self.categories["enc"],
-                                         scaler=self.scaler,
-                                         merged_cat=self.categories["merged_cat"],
-                                         discret_cat=self.categories["discret_cat"],
-                                         categorical=self.categorical,
-                                         discretize=self.discretize)
-        return super().predict_proba(X.to_numpy())
+    @property
+    def _treats_features(self) -> bool:
+        return bool(self.discretize or self.categorical)
+
+    def _as_frame(self, X) -> pd.DataFrame:
+        X = np.asarray(X, dtype=object)
+        columns = list(self.column_names) if self.column_names is not None else [f"x{j}" for j in range(X.shape[1])]
+        frame = pd.DataFrame(X, columns=columns)
+        categorical = [] if self.categorical is None else list(self.categorical)
+        for column in columns:
+            frame[column] = as_categories(frame[column]) if column in categorical else frame[column].astype(float)
+        return frame
+
+    def _transform(self, X):
+        if self._treats_features and self._single_class_label is None:
+            return self.processing.transform(self._as_frame(X)).to_numpy(dtype=float)
+        return np.asarray(X)
+
+    def fit(self, X, y, sample_weight=None):
+        X = np.asarray(X)
+        y = np.asarray(y)
+        if self._treats_features and np.unique(y).size > 1:
+            frame = self._as_frame(X)
+            frame["y"] = y
+            self.processing = Processing(target="y", discretize=self.discretize, group=self.group)
+            X = self.processing.fit_transform(frame, self.categorical).to_numpy(dtype=float)
+        return super().fit(X, y, sample_weight)
+
+    def predict(self, X):
+        return super().predict(self._transform(X))
+
+    def predict_proba(self, X):
+        return super().predict_proba(self._transform(X))

@@ -13,8 +13,7 @@ from verticapy.connect import connect
 from verticapy.connect import new_connection
 
 from lrtree import Lrtree
-from lrtree.discretization import Processing
-from lrtree.fit import _fit_parallelized
+from lrtree.discretization import traitement_train, traitement_val
 
 conn_info = {"host": os.environ.get("IP_VERTICA"),
              "port": 5433,
@@ -62,7 +61,9 @@ if __name__ == "__main__":
 
     X_train, labels, enc, scaler, merged_cat, discret_cat = traitement_train(data[Used + ["Defaut_12_Mois_contagion"]],
                                                                              target="Defaut_12_Mois_contagion",
-                                                                             categorical=categorical)
+                                                                             categorical=categorical,
+                                                                             clean_extremes=True,
+                                                                             legacy_schema=True)
     column_names = {'par_0': 'DAV_Null_EHB_DAV', 'par_1': 'DAV_Null_SLD_MOY_CREDITEUR_M',
                     'par_2': 'DAV_Null_SOLDE_MOYEN_FLUX_12M', 'par_3': 'DAV_Null_SOLDE_MOYEN_M',
                     'par_4': 'DAV_Null_SOLDE_MINIMUM_12M', 'par_5': 'DAV_Null_FLX_DBT_NBOPE_DEB_12',
@@ -89,10 +90,10 @@ if __name__ == "__main__":
     y = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
     y_train = y.astype(np.int32)
     model = Lrtree(criterion="gini", algo='SEM', class_num=8,
-                   max_iter=200, validation=True, data_treatment=False)
+                   max_iter=200, validation=True)
     model.fit(X=X_train, y=y_train, optimal_size=True, tree_depth=3)
     # model = _fit_parallelized(X=X_train, y=y_train, criterion="gini", algo='SEM', nb_init=8, tree_depth=3, class_num=8,
-    #                           max_iter=200, validation=True, data_treatment=False, optimal_size=True, nb_jobs=2)
+    #                           max_iter=200, validation=True, optimal_size=True, nb_jobs=2)
 
     logger.info("Régression logistique")
     modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',
@@ -148,7 +149,8 @@ if __name__ == "__main__":
             data_val_part["incident"] = incident[i]
             k = k + 10000
             X_test = traitement_val(data_val_part[Used + ["Defaut_12_Mois_contagion"]],
-                                    enc, scaler, merged_cat, discret_cat)
+                                    enc, scaler, merged_cat, discret_cat, categorical, False,
+                                    clean_extremes=True, legacy_schema=True)
             y_train = [*y_train,
                        *data_val_part["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1]).astype(np.int32)]
             y_proba = [*y_proba, *model.predict_proba(X_test)]

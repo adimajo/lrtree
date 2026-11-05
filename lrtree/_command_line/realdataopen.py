@@ -44,8 +44,8 @@ def main():
             # in case it was started and stopped on some worker / needs manual deletion of .lock
             if os.path.exists(os.path.join(BASE_DIR, "realdataopen", f"{data}_{seed}.pkl")):
                 continue
-            original_train, original_val, original_test, X_train, X_val, X_test, labels_train, labels_val, labels_test,\
-                categorical = get_data(data, seed)
+            (original_train, original_val, original_test, X_train, X_val, X_test, labels_train, labels_val,
+             labels_test, categorical) = get_data(data, seed)
             lrtree_test = run_lrtree(original_train, original_val, original_test, labels_train, labels_val, labels_test,
                                      categorical)
             reglog_test, tree_test, boost_test, forest_test = run_other_models(
@@ -56,8 +56,8 @@ def main():
             try:
                 with open(os.path.join(BASE_DIR, "realdataopen", f"{data}_{seed}.pkl"), 'wb') as f:
                     pickle.dump(results, f)
-            except:  # nosec
-                pass
+            except OSError as error:  # the shared folder may be unavailable: results are kept in memory anyway
+                logger.warning(f"Could not save the results of {data} (seed {seed}): {error}")
         partial_df = pd.DataFrame(results_exp, columns=[
             "Dataset", "[MODEL]", "Logistic regression", "Decision tree", "Boosting", "Random Forest"]).agg(
             ["mean", "std"])
@@ -80,7 +80,7 @@ def concat_results_from_workers():
             logger.info(f"Computations not finished for {data}, let's wait a bit...")
             time.sleep(60 * 10)  # wait for 10 minutes
         try:
-            results_df.append(pd.read_pickle(os.path.join(BASE_DIR, "realdataopen", f"{data}.pkl")))
+            results_df.append(pd.read_pickle(os.path.join(BASE_DIR, "realdataopen", f"{data}.pkl")))  # nosec B301
         except Exception as e:
             msg = f"Could not read results for {data}, aborting..."
             logger.error(msg)
@@ -96,14 +96,14 @@ def get_from_uci(train: str, test: str = None, **kwargs) -> (pd.DataFrame, pd.Da
         original_train = pd.read_csv(train, **kwargs)
         original_train.to_pickle(filename_train)
     else:
-        original_train = pd.read_pickle(filename_train)
+        original_train = pd.read_pickle(filename_train)  # nosec B301
     if test is not None:
         filename_test = test.split('/')[-1]
         if not os.path.isfile(filename_test):
             original_test = pd.read_csv(test, **kwargs, skiprows=1)
             original_test.to_pickle(filename_test)
         else:
-            original_test = pd.read_pickle(filename_test)
+            original_test = pd.read_pickle(filename_test)  # nosec B301
     else:
         original_test = None
     return original_train, original_test
@@ -162,8 +162,8 @@ def get_adult_data(target: str, seed: int):
     original[target] = original[target].astype(int)
     del original["Education"]
     original_train, original_val, original_test = split_dataset(original, seed)
-    return original_train.reset_index(drop=True), original_val.reset_index(drop=True),\
-        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True),\
+    return original_train.reset_index(drop=True), original_val.reset_index(drop=True), \
+        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True), \
         original_val[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
@@ -186,8 +186,8 @@ def get_german_data(target: str, seed: int):
         train=url, test=None, names=features, sep=r' ', engine='python', index_col=False)
     original[target] = original[target] - 1
     original_train, original_val, original_test = split_dataset(original, seed)
-    return original_train.reset_index(drop=True), original_val.reset_index(drop=True),\
-        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True),\
+    return original_train.reset_index(drop=True), original_val.reset_index(drop=True), \
+        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True), \
         original_val[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
@@ -213,8 +213,8 @@ def get_fraud_data(target: str, seed: int):
     original = pd.read_csv("creditcard.csv", engine='python')
     del original['Time']
     original_train, original_val, original_test = split_dataset(original, seed)
-    return original_train.reset_index(drop=True), original_val.reset_index(drop=True),\
-        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True),\
+    return original_train.reset_index(drop=True), original_val.reset_index(drop=True), \
+        original_test.reset_index(drop=True), original_train[target].reset_index(drop=True), \
         original_val[target].reset_index(drop=True), original_test[target].reset_index(drop=True), categorical
 
 
@@ -228,9 +228,9 @@ def get_data(dataset: str, seed: int = 0, discretize: bool = False, group: bool 
     X_train = processing.fit_transform(X=original_train, categorical=categorical)
     X_val = processing.transform(original_val)
     X_test = processing.transform(original_test)
-    return original_train.drop(targets[dataset], axis=1),\
-        original_val.drop(targets[dataset], axis=1),\
-        original_test.drop(targets[dataset], axis=1),\
+    return original_train.drop(targets[dataset], axis=1), \
+        original_val.drop(targets[dataset], axis=1), \
+        original_test.drop(targets[dataset], axis=1), \
         X_train, X_val, X_test, labels_train, labels_val, labels_test, categorical
 
 
@@ -264,7 +264,7 @@ def run_benchmark(original_train, original_val, original_test, labels_train: np.
             "tol": 1e-9,
             "categorical": categorical})
 
-    return roc_auc_score(labels_val, model.predict_proba(original_val)),\
+    return roc_auc_score(labels_val, model.predict_proba(original_val)), \
         roc_auc_score(labels_test, model.predict_proba(original_test))
 
 
