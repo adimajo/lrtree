@@ -14,9 +14,8 @@ def data():
 def test_predict(data):
     X, y = data
 
-    for data_treatment in (True, False):
-        model = lrtree.Lrtree(criterion="aic", class_num=10, max_iter=20, data_treatment=data_treatment,
-                              random_state=0)
+    for discretize in (True, False):
+        model = lrtree.Lrtree(criterion="aic", class_num=10, max_iter=20, discretize=discretize, random_state=0)
         model.fit(pd.DataFrame(X), y, nb_init=1, tree_depth=2)
         assert model.predict(pd.DataFrame(X)).shape == (1000,)
         probabilities = model.predict_proba(pd.DataFrame(X))

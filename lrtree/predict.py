@@ -3,15 +3,16 @@ Predict, predict_proba and precision methods for the Lrtree class
 """
 import numpy as np
 
-from lrtree.fit import _segments
+from lrtree.fit import _model_features, _segments, _tree_features
 
 
 def _predict(self, X: np.ndarray, fun: str) -> np.ndarray:
     self._check_is_fitted()
     # Features are used positionally, as when fitting
-    X = np.asarray(X, dtype=float)
+    X_tree = _tree_features(self, X)
+    X = _model_features(self, X)
     # Predicted segment (c_map) of each sample
-    classes = _segments(self.best_link, X, self.leaves_as_segment)
+    classes = _segments(self.best_link, X_tree, self.leaves_as_segment)
 
     prediction = np.empty(X.shape[0])
     for label in np.unique(classes):

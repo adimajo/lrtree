@@ -17,6 +17,7 @@ logistic regressions, fitted by a stochastic EM (SEM) algorithm. Entry point: `l
 | `lrtree/discretization.py` | MDLP discretisation, chi2 level merging (`grouping`, `green_clust`), `Processing` class, one-hot/scaling |
 | `lrtree/generate_data.py` | toy data (`Lrtree.generate_data`, static) with a known 4-leaf tree |
 | `benchmarks/` | Python port of glmtree's benchmark (`real_data.py`, `common.py`, `export_datasets.R`, `data/`, `reference/`, `results/`) |
+| `lrtree/_command_line/` | the `lrtree-consistency` and `lrtree-realdata` console scripts (`pip install lrtree[scripts]`); `realdataopen` downloads UCI / Kaggle data |
 | `scripts/` | experiments on private datasets (Kaggle, Vertica, `N:\` paths): not runnable here, only kept importable |
 | `tests/` | pytest; `conftest.py` forwards loguru records to `caplog` |
 
@@ -38,8 +39,13 @@ logistic regressions, fitted by a stochastic EM (SEM) algorithm. Entry point: `l
 - Segment models are fresh `LogRegSegment` objects at each iteration: the best ones must not be refitted later.
 - Randomness: everything goes through `self._rng = default_rng(random_state)`, created at the start of `fit`
   (same `random_state` = same fit). `_fit_parallelized` derives one seed per initialisation.
-- `data_treatment=True` needs a DataFrame and discretises (MDLP) the features *inside each segment*
-  (`Processing`, owned by `LogRegSegment`); the tree always sees the raw features.
+- `categorical=[names]` (argument of `fit`), `discretize` and `group` (arguments of `Lrtree`) need a DataFrame. The
+  regressions of the segments get the raw features (object array, selected by name) and treat them *inside each
+  segment* (`Processing`, owned by `LogRegSegment`: merging of levels, MDLP discretisation, one-hot, scaling); the
+  segmentation tree gets numerical features as they are and one-hot encoded categorical ones (`_tree_features`,
+  encoder fitted once in `_init_fit`). Missing levels are a level of their own (`as_categories`).
+- `fit(solver=...)` overrides the solver of `logreg_kwargs`; the positional order of `fit` is upstream's
+  (`X, y, solver, nb_init, ...`), my additions (`min_samples_leaf`) come last.
 
 ## Commands
 
@@ -50,7 +56,7 @@ uv venv .venv && uv pip install -e ".[test,docs,bench]"
 .venv/bin/coverage run --source lrtree -m pytest && .venv/bin/coverage report
 .venv/bin/python -m build && .venv/bin/twine check dist/*
 .venv/bin/sphinx-build docs/source docs/build/html   # needs the docs extra
-.venv/bin/python scripts/profiling.py                # cProfile of one fit (n = 10000)
+.venv/bin/python scripts/profiling.py                # times one fit (n = 10000)
 # benchmark: glmtree's protocol in Python (~25 min on 8 cores); writes results.csv, summary.txt, comparison.csv
 .venv/bin/python -m benchmarks.real_data 20 100 benchmarks/results
 # datasets of the benchmark come from R packages; they are committed, regenerate only if needed
@@ -59,7 +65,7 @@ R_LIBS_USER=$HOME/R/library Rscript benchmarks/export_datasets.R benchmarks/data
 
 Pitfalls:
 - Tests and experiments must pass `random_state`; the chain is stochastic. A single chain often lands in a local
-  optimum: use `nb_init` / `_fit_parallelized` (see `scripts/consistency.py`).
+  optimum: use `nb_init` / `_fit_parallelized` (see `lrtree/_command_line/consistency.py`).
 - Fit time is dominated by scikit-learn's `LogisticRegression` (one fit per segment and iteration): vectorising
   our own code does not change the wall time much. Profile before optimising.
 - Everything is numpy inside the chain (no feature names, so no sklearn feature-name warnings); DataFrames are
@@ -67,7 +73,10 @@ Pitfalls:
 - pandas 3 copy-on-write: no chained assignment, no `inplace=True` on a column; sklearn 1.8 deprecates
   `penalty=` in `LogisticRegression` (tests use `C=` only).
 - `creditcard.csv` at the repo root is a 144 MB untracked Kaggle file: it is gitignored, never commit it.
-- `.gitlab-ci.yml` and `.pypirc` target internal infrastructure and are deliberately untouched.
+- `.gitlab-ci.yml` and `.pypirc` target internal infrastructure (python 3.8 image, pipenv, `python setup.py
+  sdist bdist_wheel`) and are deliberately untouched: hence `Pipfile`, `requirements*.txt` and the `setup.py` shim
+  (metadata are in `pyproject.toml`) are kept.
+- `tikzplotlib` (used by `_command_line/consistency.py`) does not import with matplotlib 3.11: not a test dependency.
 
 ## Conventions
 

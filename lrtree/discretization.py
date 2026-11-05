@@ -11,6 +11,14 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
 
 
+def as_categories(column: pd.Series) -> pd.Series:
+    """
+    The levels of a categorical feature as strings. Missing values are a level of their own ("nan"): with pandas'
+    string dtype ``astype(str)`` would keep them missing and they could not be compared with the other levels.
+    """
+    return column.astype(object).where(column.notna(), "nan").astype(str)
+
+
 def chi2_test(liste):
     try:
         return chi2_contingency(liste)[1]
@@ -19,7 +27,8 @@ def chi2_test(liste):
         return 1
 
 
-def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2) -> (pd.DataFrame, dict):
+def grouping(X: pd.DataFrame, var: str, var_predite: str, group: bool = True,
+             seuil: float = 0.2) -> (pd.DataFrame, dict):
     """
     Chi2 independence algorithm to group modalities
 
@@ -31,18 +40,20 @@ def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2) ->
         Column we aim to predict
     :param str var_predite:
         Column we aim to predict
+    :param bool group:
+        Whether to merge modalities (if False, the modalities are left as they are)
     :param float seuil:
         Value for the p-value over which we merge modalities
     """
     X_grouped = X.copy()
 
     # Necessary to be able to compare (and unique) categories
-    X_grouped[var] = X_grouped[var].astype(str)
+    X_grouped[var] = as_categories(X_grouped[var])
     initial_categories = np.unique(X_grouped[var])
 
     p_value = 1
     # We want a minimum of two categories, otherwise the variable becomes useless
-    while p_value > seuil and len(np.unique(X_grouped[var])) > 2:
+    while group and p_value > seuil and len(np.unique(X_grouped[var])) > 2:
         # Counts the number of 0/1 by modality
         freq_table = X_grouped.groupby([var, var_predite]).size().reset_index(name=0)
         # All the combinations of values
@@ -67,7 +78,8 @@ def grouping(X: pd.DataFrame, var: str, var_predite: str, seuil: float = 0.2) ->
         for cat in regrouped_cate.split(' - '):
             dico_regroupement[cat] = regrouped_cate
 
-    logger.debug(f"Feature {var} went from {len(initial_categories)} to {len(new_categories)} levels.")
+    if group:
+        logger.debug(f"Feature {var} went from {len(initial_categories)} to {len(new_categories)} levels.")
 
     return X_grouped, dico_regroupement
 
@@ -225,7 +237,7 @@ def discretize_feature(X: pd.DataFrame, var: str, var_predite: str):
     return X, binning
 
 
-def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, discretize=True):
+def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, discretize=True, group=True):
     """
     Binarise the categorical variables (after merging categories) and standardise the remaining numerical ones.
     Returns the data, the column labels, the encoder, the merged categories, the cuts of the discretised
@@ -235,6 +247,7 @@ def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, di
     :param str var_cible: name of target
     :param list categorical: list of categorical features' names
     :param bool discretize: whether to discretize continuous features
+    :param bool group: whether to merge the levels of categorical features
     """
     categorical = [] if categorical is None else list(categorical)
     X = data.copy()
@@ -243,8 +256,8 @@ def categorie_data_bin_train(data: pd.DataFrame, var_cible, categorical=None, di
     for column in categorical:
         if column in X.columns:
             to_change.append(column)
-            X[column] = X[column].astype(str)
-            X, dico = grouping(X, column, var_cible)
+            X[column] = as_categories(X[column])
+            X, dico = grouping(X, column, var_cible, group)
             merged_cat[column] = dico
 
     discret_cat = {}
@@ -304,7 +317,7 @@ def categorie_data_bin_test(data_val: pd.DataFrame, enc: OneHotEncoder, scaler: 
     # Same column order as in training, otherwise the encoder (which checks feature names) complains
     to_change = [column for column in categorical if column in X_val.columns]
     for column in to_change:
-        X_val[column] = X_val[column].astype(str)
+        X_val[column] = as_categories(X_val[column])
     # Merging the categories
     X_val = X_val.replace(merged_cat)
     if discretize:
@@ -382,7 +395,7 @@ def green_clust(X: pd.DataFrame, var: str, var_predite: str, num_clusters: int) 
      """
     df = X.copy()
     # Necessary to be able to compare (and unique) categories
-    df[var] = df[var].astype(str)
+    df[var] = as_categories(df[var])
     # Get the modalities
     labels = df[var].unique()
     clustered = df[var].copy()
@@ -504,7 +517,7 @@ def traitement_val(data: pd.DataFrame, enc: OneHotEncoder, scaler: StandardScale
     return categorie_data_bin_test(X_val, enc, scaler, merged_cat, discret_cat, categorical, discretize)
 
 
-def traitement_train(data: pd.DataFrame, target: str, categorical=None, discretize=False,
+def traitement_train(data: pd.DataFrame, target: str, categorical=None, discretize=False, group=False,
                      clean_extremes: bool = False, legacy_schema: bool = False) -> tuple:
     """
     Treats the training data (extreme values, categorical variables, normalisation)
@@ -513,6 +526,7 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
     :param str target: variable cible
     :param list categorical: list of categorical features' names
     :param bool discretize: whether to discretize continuous features
+    :param bool group: whether to merge the levels of categorical features
     :param bool clean_extremes: whether to replace sentinel values (see :func:`extreme_values`)
     :param bool legacy_schema: recode the target / flags specific to the in-house credit datasets
     :return: processed data, labels of columns, encoder for categorical data, scaler for numerical data, merged
@@ -528,7 +542,8 @@ def traitement_train(data: pd.DataFrame, target: str, categorical=None, discreti
         X,
         var_cible=target,
         categorical=categorical,
-        discretize=discretize)
+        discretize=discretize,
+        group=group)
     return X, labels, enc, scaler, merged_cat, discrete_cat, len_col_num
 
 
@@ -539,12 +554,14 @@ class Processing:
 
     :param str target: name of the target column
     :param bool discretize: whether to discretise numerical features (MDLP) before one-hot encoding them
+    :param bool group: whether to merge the levels of categorical features (chi2 independence test)
     :param float merge_threshold: p-value over which the levels of a categorical feature are merged
     :param bool clean_extremes: whether to replace sentinel values (99999, 999...) by 0
     """
-    def __init__(self, target: str, discretize: bool = False, merge_threshold: float = 0.2,
+    def __init__(self, target: str, discretize: bool = False, group: bool = False, merge_threshold: float = 0.2,
                  clean_extremes: bool = False):
         self.target = target
+        self.group = group
         self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat = [None] * 5
         self.discretize = discretize
         self.num_cols = []
@@ -566,7 +583,7 @@ class Processing:
         # Application sur train
         X, self.labels, self.enc, self.scaler, self.merged_cat, self.discrete_cat, len_col_num = traitement_train(
             data=X, target=self.target, categorical=self.cat_cols, discretize=self.discretize,
-            clean_extremes=self.clean_extremes
+            group=self.group, clean_extremes=self.clean_extremes
         )
         if len_col_num != len(self.num_cols) - (len(self.discrete_cat) if self.discretize else 0):
             raise ValueError("Inconsistent number of numerical columns after treatment.")

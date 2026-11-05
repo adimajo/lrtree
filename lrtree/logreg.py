@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
-from lrtree.discretization import Processing
+from lrtree.discretization import Processing, as_categories
 
 # Parameters of the parent class, computed once: scikit-learn re-inspects the signature of ``__init__`` on every
 # ``get_params`` call (hence on every ``repr`` / ``clone``)
@@ -55,43 +55,61 @@ class PossiblyOneClassReg(LogisticRegression):
 
 class LogRegSegment(PossiblyOneClassReg):
     """
-    Logistic regression of one segment. All keyword arguments but ``discretization`` are those of
+    Logistic regression of one segment. All keyword arguments but the first four are those of
     :class:`sklearn.linear_model.LogisticRegression`.
 
-    :param bool discretization: whether to discretise the features inside the segment before fitting
-        (see :class:`lrtree.discretization.Processing`)
+    When the features have to be treated inside the segment (categorical features, discretisation or merging of
+    levels), the regression takes the features as a 2-d array whose columns are in the order of ``column_names`` and
+    treats them with a :class:`lrtree.discretization.Processing` fitted on the segment.
+
+    :param bool discretize: whether to discretise the numerical features inside the segment
+    :param bool group: whether to merge the levels of the categorical features inside the segment
+    :param list categorical: names of the categorical features
+    :param list column_names: names of the columns of the features (needed to find the categorical ones)
     """
 
-    def __init__(self, discretization: bool = False, **kwargs):
+    def __init__(self, discretize: bool = False, group: bool = False, categorical=None, column_names=None,
+                 **kwargs):
         unknown = set(kwargs) - set(_LOGREG_PARAMS)
         if unknown:
             raise TypeError(f"Unexpected keyword argument(s) {sorted(unknown)}")
         super().__init__(**kwargs)
-        self.discretization = discretization
+        self.discretize = discretize
+        self.group = group
+        self.categorical = categorical
+        self.column_names = column_names
         self.processing = None
 
     @classmethod
     def _get_param_names(cls):
-        return [*_LOGREG_PARAMS, "discretization"]
+        return [*_LOGREG_PARAMS, "discretize", "group", "categorical", "column_names"]
 
-    @staticmethod
-    def _as_frame(X) -> pd.DataFrame:
-        X = np.asarray(X)
-        return pd.DataFrame(X, columns=[f"x{j}" for j in range(X.shape[1])])
+    @property
+    def _treats_features(self) -> bool:
+        return bool(self.discretize or self.categorical)
+
+    def _as_frame(self, X) -> pd.DataFrame:
+        X = np.asarray(X, dtype=object)
+        columns = list(self.column_names) if self.column_names is not None else [f"x{j}" for j in range(X.shape[1])]
+        frame = pd.DataFrame(X, columns=columns)
+        categorical = [] if self.categorical is None else list(self.categorical)
+        for column in columns:
+            frame[column] = as_categories(frame[column]) if column in categorical else frame[column].astype(float)
+        return frame
 
     def _transform(self, X):
-        if self.discretization and self._single_class_label is None:
-            return self.processing.transform(self._as_frame(X)).to_numpy()
+        if self._treats_features and self._single_class_label is None:
+            return self.processing.transform(self._as_frame(X)).to_numpy(dtype=float)
         return np.asarray(X)
 
     def fit(self, X, y, sample_weight=None):
         X = np.asarray(X)
         y = np.asarray(y)
-        if self.discretization and np.unique(y).size > 1:
+        if self._treats_features and np.unique(y).size > 1:
             frame = self._as_frame(X)
             frame["y"] = y
-            self.processing = Processing(target="y", discretize=True)
-            X = self.processing.fit_transform(frame).to_numpy()
+            self.processing = Processing(target="y", discretize=self.discretize, group=self.group)
+            X = self.processing.fit_transform(frame, self.categorical).to_numpy(dtype=float)
         return super().fit(X, y, sample_weight)
 
     def predict(self, X):

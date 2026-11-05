@@ -12,7 +12,13 @@ fitted with 1.0.0 give different results and the objects are not compatible.
   `LogRegSegment`.
 * `burn_in` iterations can no longer be selected as the best model (they only counted for early stopping before).
 * `predict` returns the labels given when fitting (it returned 0 / 1).
-* Python >= 3.10, pandas >= 2.0, scikit-learn >= 1.4. `setup.py`, `Pipfile` and Travis are replaced by
+* `data_treatment` is replaced by `discretize` (numerical features, MDLP) and `group` (merging of the levels of
+  categorical features), as in upstream's 1.0.x; categorical features are declared with `fit(categorical=[...])`
+  and need a DataFrame. `fit` gained `solver` (second positional argument, as upstream). `_fit_func` and
+  `_fit_parallelized` take `fit_kwargs` first, `class_kwargs` being optional.
+* `_set_early_stopping`: unknown rules are ignored with a warning; asking for rules and getting none of them
+  raises a `ValueError`.
+* Python >= 3.10, pandas >= 2.0, scikit-learn >= 1.4. Travis and `setup.py`'s metadata are replaced by
   `pyproject.toml` and a GitHub Actions workflow.
 
 ## Bug fixes
@@ -35,7 +41,7 @@ fitted with 1.0.0 give different results and the objects are not compatible.
 * Early stopping rules were crossed (`low improvement` only for the Gini, `low variation` only for AIC / BIC);
   EM never incremented its iteration counter inside the loop. A second `fit` kept the best criterion and the
   criterion history of the first one.
-* `_check_args` was skipped when `data_treatment=True`, iterated over every element of `y`, and a `pd.Series`
+* `_check_args` was skipped when the features were treated, iterated over every element of `y`, and a `pd.Series`
   `y` with a non-default index was misaligned.
 * `grouping` assigned through `.iloc` with a boolean mask (an error on pandas 3), `np.in1d`, `np.NaN`,
   `OneHotEncoder(sparse=...)` and chained `inplace` calls were removed. `extreme_values` (sentinels such as 999
@@ -58,4 +64,8 @@ fitted with 1.0.0 give different results and the objects are not compatible.
 * `Lrtree(random_state=...)` for reproducible fits; `Lrtree(logreg_kwargs=...)` to configure the regressions;
   `fit(min_samples_leaf=...)`; `Lrtree.generate_data` uses `numpy.random.default_rng`.
 * `benchmarks/`: Python port of glmtree's benchmark with a comparison of the results (see `benchmarks/README.md`).
+* Missing values of a categorical feature are a level of their own (`discretization.as_categories`): with pandas
+  3's string dtype `astype(str)` kept them missing and merging the levels failed.
+* `lrtree-consistency` and `lrtree-realdata` console scripts (`lrtree[scripts]` extra); `TQDM_DISABLE` switches
+  the progress bars off; `Pipfile`, `requirements*.txt` and a `setup.py` shim are kept for the internal GitLab pipeline.
 * `CLAUDE.md` describes the design and the commands.

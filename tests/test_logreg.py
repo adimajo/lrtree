@@ -36,7 +36,7 @@ def test_logreg_segment_forwards_parameters():
     model = LogRegSegment(solver="saga", C=0.01, tol=1e-2)
     assert (model.solver, model.C, model.tol) == ("saga", 0.01, 1e-2)
     assert model.get_params()["C"] == 0.01
-    assert model.get_params()["discretization"] is False
+    assert model.get_params()["discretize"] is False
     assert "LogRegSegment" in repr(model)
     with pytest.raises(TypeError):
         LogRegSegment(not_a_parameter=1)
@@ -47,7 +47,7 @@ def test_logreg_segment_fit_predict(discretization):
     rng = np.random.default_rng(0)
     X = rng.normal(size=(400, 3))
     y = (X[:, 0] ** 2 + 0.3 * rng.normal(size=400) > 1).astype(int)
-    model = LogRegSegment(discretization=discretization).fit(X, y)
+    model = LogRegSegment(discretize=discretization).fit(X, y)
     assert model.predict_proba(X).shape == (400, 2)
     assert model.predict(X).shape == (400,)
     if discretization:
@@ -57,5 +57,16 @@ def test_logreg_segment_fit_predict(discretization):
 
 def test_logreg_segment_pure_with_discretization():
     X = np.random.default_rng(0).normal(size=(50, 2))
-    model = LogRegSegment(discretization=True).fit(X, np.zeros(50))
+    model = LogRegSegment(discretize=True).fit(X, np.zeros(50))
     assert model.predict(X).tolist() == [0.] * 50
+
+
+def test_logreg_segment_categorical_features():
+    rng = np.random.default_rng(0)
+    X = np.column_stack([rng.normal(size=300), rng.choice(["a", "b", "c"], size=300)]).astype(object)
+    y = ((X[:, 1] == "a") ^ (rng.random(300) < 0.1)).astype(int)
+    model = LogRegSegment(categorical=["cat"], column_names=["num", "cat"], group=True).fit(X, y)
+    assert (model.predict(X) == y).mean() > 0.85
+    # parameters survive a clone
+    from sklearn.base import clone
+    assert clone(model).get_params()["categorical"] == ["cat"]

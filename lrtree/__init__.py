@@ -112,6 +112,7 @@ def _set_early_stopping(early_stopping) -> list:
         "low variation" and "changed segments"
     :returns: the list of rules; unknown rules are ignored with a warning
     :rtype: list
+    :raises: ValueError if rules are asked for but none of them is recognised
     """
     rules = (LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS)
     if isinstance(early_stopping, bool):
@@ -123,7 +124,12 @@ def _set_early_stopping(early_stopping) -> list:
         unknown = [rule for rule in requested if rule not in rules]
         if unknown:
             logger.warning(f"Unrecognized early stopping rule(s) {unknown}, ignored. Choose among {list(rules)}.")
-        return [rule for rule in requested if rule in rules]
+        valid = [rule for rule in requested if rule in rules]
+        if not valid:
+            msg = f"Unrecognized early stopping rule, must be in {list(rules)}."
+            logger.error(msg)
+            raise ValueError(msg)
+        return valid
     logger.warning(f"Unrecognized early stopping argument {early_stopping!r}, using default (False).")
     return []
 
@@ -202,7 +208,8 @@ class Lrtree:
                  ratios: tuple = (0.7,),
                  class_num: int = 10,
                  max_iter: int = 100,
-                 data_treatment: bool = False,
+                 discretize: bool = False,
+                 group: bool = False,
                  leaves_as_segment: bool = False,
                  early_stopping=False,
                  burn_in: int = 30,
@@ -237,8 +244,8 @@ class Lrtree:
                                 validation set, the remainder goes to the test set.
                                 Sum of values should be less than 1. Defaults to (0.7,)
         :param int class_num:   Number of initial segments. Defaults to 10.
-        :param bool data_treatment: Whether or not we want the data to be discretized/merged categories in each
-                                    leaf.
+        :param bool discretize: Whether we want the numerical data to be discretized in each leaf.
+        :param bool group: Whether we want the categorical data to be merged in each leaf.
         :param bool leaves_as_segment: MAP or leaves-as-segment.
         :param early_stopping: bool (default: False or list of early stopping rules: can be one or several
             from "low improvement", "low variation", "changed segments").
@@ -255,6 +262,8 @@ class Lrtree:
         self.min_impurity_decrease = None
         self.optimal_size = None
         self.min_samples_leaf = 1
+        self.solver = None
+        self.categorical = []
 
         self.criterion = criterion.lower()
         self.algo = algo.lower()
@@ -275,8 +284,10 @@ class Lrtree:
         self.max_iter = max_iter
         self.class_num = class_num
         self.ratios = ratios
-        self.data_treatment = data_treatment
+        self.discretize = discretize
+        self.group = group
         self.column_names = None
+        self._tree_encoder = None
         self.leaves_as_segment = leaves_as_segment
         self.logreg_kwargs = {} if logreg_kwargs is None else dict(logreg_kwargs)
         self.random_state = random_state

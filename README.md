@@ -11,8 +11,8 @@ Table of Contents
 
 * [Documentation](https://adimajo.github.io/lrtree)
 * [Installation instructions](#-installing-the-package)
-* [Theory](#-use-case-example)
-* [Some examples](#-the-lrtree-package)
+* [Theory](https://adimajo.github.io/logistic_trees.html)
+* [Some examples](#-utilization)
 * [Open an issue](https://github.com/adimajo/lrtree/issues/new/choose)
 * [References](#-references)
 * [Contribute](#-contribute)
@@ -53,6 +53,12 @@ You can install a stable version from [PyPi](https://pypi.org/project/lrtree/) b
 
 ```PowerShell
 pip install lrtree
+```
+
+To run the provided scripts, `lrtree-consistency` and `lrtree-realdata`, you need a
+few additional dependencies:
+```bash
+pip install lrtree[scripts]
 ```
 
 #### Installation guide for Anaconda
@@ -159,3 +165,18 @@ model.fit(X_train, y_train)
 # Make a prediction on a fitted model
 model.predict(X_test)
 ```
+
+If you installed the additional dependencies for scripts, you can also run directly from the command line:
+```bash
+LOGURU_LEVEL="ERROR" DEBUG="True" lrtree-consistency
+```
+
+or
+```bash
+LOGURU_LEVEL="ERROR" TQDM_DISABLE="1" lrtree-realdata
+```
+
+Beware: if you don't set `LOGURU_LEVEL` then it is implicitly set on DEBUG
+which will yield a lot of prints. Also, both scripts will take very long
+to complete as they test the consistency of the method for various
+hyperparameters and run cross-validation on 3 real datasets respectively.

@@ -45,10 +45,10 @@ def test_args_fit(data):
                 model.predict(X)
 
     with pytest.raises(ValueError):
-        model = lrtree.Lrtree(criterion="gini", max_iter=1, data_treatment=True)
+        model = lrtree.Lrtree(criterion="gini", max_iter=1, discretize=True)
         model.fit(X, y, nb_init=1, tree_depth=2)
     for validation in (True, False):
-        model = lrtree.Lrtree(validation=validation, criterion="gini", max_iter=1, data_treatment=True,
+        model = lrtree.Lrtree(validation=validation, criterion="gini", max_iter=1, discretize=True,
                               random_state=0)
         model.fit(pd.DataFrame(X), y, nb_init=1, tree_depth=2)
 
@@ -57,11 +57,14 @@ def test_fit_func_and_parallelized(data):
     X, y = data
     class_kwargs = {"class_num": 4, "max_iter": 3, "random_state": 0}
     fit_kwargs = {"X": X, "y": y, "tree_depth": 2}
-    model = lrtree.fit._fit_func(class_kwargs, fit_kwargs)
+    model = lrtree.fit._fit_func(fit_kwargs, class_kwargs)
     assert isinstance(model, lrtree.Lrtree)
-    best = lrtree.fit._fit_parallelized(class_kwargs, fit_kwargs, nb_init=2, nb_jobs=1)
+    # the arguments of the class are optional
+    assert isinstance(lrtree.fit._fit_func(fit_kwargs={"X": X, "y": y, "tree_depth": 2}), lrtree.Lrtree)
+    best = lrtree.fit._fit_parallelized(fit_kwargs, class_kwargs, nb_init=2, nb_jobs=1)
     assert isinstance(best, lrtree.Lrtree)
     assert best.best_link is not None
+    assert lrtree.fit._fit_parallelized(fit_kwargs=fit_kwargs, nb_jobs=1) is not None
 
 
 def test_dataset_length():
@@ -307,7 +310,9 @@ def test_unknown_early_stopping_warns(caplog):
     model = lrtree.Lrtree(early_stopping=["low variation", "toto"])
     assert model.early_stopping == [lrtree.LOW_VARIATION]
     assert "toto" in caplog.records[-1].message
-    assert lrtree.Lrtree(early_stopping="toto").early_stopping == []
+    # asking for rules and getting none of them is an error
+    with pytest.raises(ValueError):
+        lrtree.Lrtree(early_stopping="toto")
     assert lrtree.Lrtree(early_stopping=True).early_stopping == [
         lrtree.LOW_IMPROVEMENT, lrtree.LOW_VARIATION, lrtree.CHANGED_SEGMENTS]
 
@@ -346,3 +351,87 @@ def test_models_are_not_shared_between_iterations(data):
     for label, coef in before.items():
         np.testing.assert_array_equal(model.best_logreg[label].coef_, coef)
     assert all(isinstance(m, LogRegSegment) for m in model.best_logreg.values())
+
+
+def test_generate_data_theta_and_seed():
+    with pytest.raises(ValueError):
+        lrtree.Lrtree.generate_data(100, 4, seed=1, theta=np.ones(5))
+    with pytest.raises(ValueError):
+        lrtree.Lrtree.generate_data(100, 4, theta=[1, 2])
+
+
+@pytest.fixture
+def mixed_data():
+    """Two numerical features and one categorical (string) feature that drives the segments"""
+    rng = np.random.default_rng(0)
+    n = 600
+    X = pd.DataFrame({"a": rng.normal(size=n), "b": rng.normal(size=n),
+                      "cat": rng.choice(["u", "v", "w", "z"], size=n)})
+    slope = np.where(X["cat"].isin(["u", "v"]), 2.0, -2.0)
+    y = (rng.random(n) < 1 / (1 + np.exp(-slope * X["a"]))).astype(int)
+    return X, y
+
+
+def test_categorical_features(mixed_data):
+    X, y = mixed_data
+    model = lrtree.Lrtree(class_num=4, max_iter=15, burn_in=3, random_state=0)
+    model.fit(X, y, tree_depth=2, categorical=["cat"])
+    assert model.categorical == ["cat"]
+    # the tree sees the numerical features and the one-hot encoded levels, the regressions see the raw features
+    assert lrtree.fit._tree_features(model, X).shape == (len(X), 2 + 4)
+    assert lrtree.fit._model_features(model, X).shape == (len(X), 3)
+    probabilities = model.predict_proba(X)
+    assert probabilities.shape == (len(X),)
+    # columns are selected by name when predicting
+    assert np.allclose(probabilities, model.predict_proba(X[["cat", "b", "a"]]))
+    # a level never seen when fitting is accepted
+    unseen = X.copy()
+    unseen["cat"] = "new level"
+    assert model.predict(unseen).shape == (len(X),)
+    assert model.precision(X, y) > 0.55
+
+
+@pytest.mark.parametrize("discretize, group", [(False, False), (True, False), (False, True), (True, True)])
+@pytest.mark.parametrize("algo", ["SEM", "EM"])
+def test_categorical_discretize_group(mixed_data, algo, discretize, group):
+    X, y = mixed_data
+    model = lrtree.Lrtree(algo=algo, class_num=3, max_iter=6, burn_in=1, discretize=discretize, group=group,
+                          random_state=0)
+    model.fit(X, y, tree_depth=2, categorical=["cat"])
+    assert model.predict(X).shape == (len(X),)
+
+
+def test_categorical_needs_a_dataframe(mixed_data):
+    X, y = mixed_data
+    with pytest.raises(ValueError):
+        lrtree.Lrtree(max_iter=2).fit(X.to_numpy(), y, categorical=["cat"])
+    with pytest.raises(ValueError):
+        lrtree.Lrtree(max_iter=2).fit(X, y, categorical=["not a column"])
+    # a string feature that is not declared as categorical is still rejected
+    with pytest.raises(ValueError):
+        lrtree.Lrtree(max_iter=2).fit(X, y)
+
+
+def test_group_without_categorical_is_a_no_op(data, caplog):
+    X, y = data
+    model = lrtree.Lrtree(class_num=3, max_iter=5, burn_in=1, group=True, random_state=0)
+    model.fit(X, y, tree_depth=2)
+    assert "'group' has no effect" in caplog.text
+
+
+def test_solver_overrides_logreg_kwargs(data):
+    X, y = data
+    model = lrtree.Lrtree(class_num=3, max_iter=4, burn_in=1, logreg_kwargs={"solver": "liblinear", "C": 0.5},
+                          random_state=0)
+    model.fit(X, y, tree_depth=2)
+    assert {m.solver for m in model.best_logreg.values()} == {"liblinear"}
+    model.fit(X, y, solver="newton-cg", tree_depth=2)
+    assert {m.solver for m in model.best_logreg.values()} == {"newton-cg"}
+    assert {m.C for m in model.best_logreg.values()} == {0.5}
+
+
+def test_tqdm_disable(data, monkeypatch, capsys):
+    X, y = data
+    monkeypatch.setenv("TQDM_DISABLE", "1")
+    lrtree.Lrtree(class_num=3, max_iter=4, burn_in=1, random_state=0).fit(X, y, tree_depth=2)
+    assert "Iterations" not in capsys.readouterr().err

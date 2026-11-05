@@ -69,6 +69,7 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
+    'myst_parser'
 ]
 
 intersphinx_mapping = {

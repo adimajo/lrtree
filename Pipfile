@@ -1,0 +1,30 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = false
+
+[dev-packages]
+flake8 = "*"
+bandit = "*"
+sphinx = "*"
+sphinx-rtd-theme = "*"
+myst-parser = "*"
+pytest = "*"
+coverage = "*"
+numpydoc = "*"
+matplotlib = "*"
+tikzplotlib = "*"
+twine = "*"
+pipenv_to_requirements = "*"
+vertica-python = "*"
+verticapy = "*"
+kaggle = "*"
+pyinstrument = "*"
+
+[packages]
+numpy = "*"
+pandas = "*"
+tabulate = "*"
+loguru = "*"
+scikit-learn = ">=1.0"
+tqdm = "*"

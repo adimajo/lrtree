@@ -90,10 +90,10 @@ if __name__ == "__main__":
     y = data["Defaut_12_Mois_contagion"].replace(["N", "O"], [0, 1])
     y_train = y.astype(np.int32)
     model = Lrtree(criterion="gini", algo='SEM', class_num=8,
-                   max_iter=200, validation=True, data_treatment=False)
+                   max_iter=200, validation=True)
     model.fit(X=X_train, y=y_train, optimal_size=True, tree_depth=3)
     # model = _fit_parallelized(X=X_train, y=y_train, criterion="gini", algo='SEM', nb_init=8, tree_depth=3, class_num=8,
-    #                           max_iter=200, validation=True, data_treatment=False, optimal_size=True, nb_jobs=2)
+    #                           max_iter=200, validation=True, optimal_size=True, nb_jobs=2)
 
     logger.info("Régression logistique")
     modele_regLog = linear_model.LogisticRegression(random_state=0, solver='liblinear', multi_class='auto',

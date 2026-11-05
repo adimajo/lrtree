@@ -1,6 +1,7 @@
 """
 fit module for the Lrtree class
 """
+import os
 import warnings
 
 import numpy as np
@@ -9,11 +10,13 @@ from joblib import Parallel, delayed
 from loguru import logger
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import roc_auc_score
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 
 import lrtree
 from lrtree import LOW_IMPROVEMENT, LOW_VARIATION, CHANGED_SEGMENTS
+from lrtree.discretization import as_categories
 from lrtree.logreg import LogRegSegment
 
 STOPPED_AT_ITERATION = "Stopped at iteration"
@@ -21,9 +24,20 @@ STOPPED_AT_ITERATION = "Stopped at iteration"
 MIN_LIKELIHOOD = 1e-12
 
 
-def _check_args(X, y) -> tuple:
+def _progress_disabled() -> bool:
+    """
+    Progress bars can be switched off with the environment variable ``TQDM_DISABLE``
+    """
+    return os.environ.get("TQDM_DISABLE", "False").lower() in ("true", "1", "t")
+
+
+def _check_args(X, y, categorical=None) -> tuple:
     """
     Checks input arguments shape and types.
+
+    :param X: the features
+    :param y: the labels
+    :param list categorical: names of the categorical features of X, which may be of any type
 
     :returns: the labels as a one-dimensional numpy array of 0 / 1, and the two original classes
     :raises: ValueError
@@ -34,8 +48,14 @@ def _check_args(X, y) -> tuple:
         logger.error(msg)
         raise ValueError(msg)
 
+    categorical = [] if categorical is None else list(categorical)
     if isinstance(X, pd.DataFrame):
-        numeric_x = all(pd.api.types.is_numeric_dtype(dtype) for dtype in X.dtypes)
+        absent = [column for column in categorical if column not in X.columns]
+        if absent:
+            msg = f"Column(s) {absent} specified in argument 'categorical' not present."
+            logger.error(msg)
+            raise ValueError(msg)
+        numeric_x = all(pd.api.types.is_numeric_dtype(X[column]) for column in X.columns if column not in categorical)
     else:
         numeric_x = np.asarray(X).dtype.kind in "biuf"
     if not numeric_x:
@@ -76,11 +96,55 @@ def _dataset_split(self):
         self.train_rows = shuffled
 
 
+def _treats_features(self) -> bool:
+    """
+    Whether the features are treated inside the segments (categorical features, discretisation)
+    """
+    return bool(self.discretize or self.categorical)
+
+
+def _model_features(self, X) -> np.ndarray:
+    """
+    The features seen by the regressions of the segments, used positionally. Floats, unless the features are
+    treated inside the segments: they are then selected by name and kept as they are (categorical features can be
+    strings).
+    """
+    if not _treats_features(self):
+        return np.asarray(X, dtype=float)
+    if isinstance(X, pd.DataFrame):
+        X = X[self.column_names]
+    return np.asarray(X, dtype=object)
+
+
+def _category_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """
+    Levels of categorical features as strings, missing values being a level of their own
+    """
+    return frame.apply(as_categories)
+
+
+def _tree_features(self, X) -> np.ndarray:
+    """
+    The features seen by the segmentation tree: numerical features as they are, categorical features one-hot
+    encoded (with the encoder fitted when fitting).
+    """
+    X = _model_features(self, X)
+    if not self.categorical:
+        return np.asarray(X, dtype=float)
+    frame = pd.DataFrame(X, columns=self.column_names)
+    numerical = frame.drop(columns=self.categorical).to_numpy(dtype=float)
+    return np.hstack([numerical, self._tree_encoder.transform(_category_frame(frame[self.categorical]))])
+
+
 def _new_model(self, **kwargs) -> LogRegSegment:
     """
     A fresh logistic regression for a segment
     """
-    return LogRegSegment(discretization=self.data_treatment, **{**self.logreg_kwargs, **kwargs})
+    params = dict(self.logreg_kwargs)
+    if self.solver is not None:
+        params["solver"] = self.solver
+    return LogRegSegment(discretize=self.discretize, group=self.group, categorical=self.categorical,
+                         column_names=self.column_names, **{**params, **kwargs})
 
 
 def _fit_segments(self, X, y, segments, predictions=None):
@@ -318,9 +382,12 @@ def _changed_segments_stop(self, i, new_cmap, c_map) -> bool:
     return False
 
 
-def _fit_sem(self, X, y, fallback):
+def _fit_sem(self, X, X_tree, y, fallback):
     """
     One chain of the stochastic EM algorithm: the segments are drawn at each iteration.
+
+    :param numpy.ndarray X: the features of the regressions of the segments
+    :param numpy.ndarray X_tree: the features of the segmentation tree
     """
     n = self.n
     c_map = self._rng.integers(self.class_num, size=n)
@@ -328,7 +395,7 @@ def _fit_sem(self, X, y, fallback):
     link = None
     self.criterion_iter = []
 
-    with tqdm(total=self.max_iter, leave=False, desc="Iterations") as pbar:
+    with tqdm(total=self.max_iter, leave=False, desc="Iterations", disable=_progress_disabled()) as pbar:
         for i in range(self.max_iter):
             logger.debug(f"Iteration {i}")
             # Getting p(y | x, c_hat) and filling the probabilities
@@ -348,13 +415,13 @@ def _fit_sem(self, X, y, fallback):
             if len(np.unique(c_hat[self.train_rows])) < 2:
                 logger.info("The tree has only its root! Premature end of algorithm.")
                 break
-            link = _fit_tree(self, X, c_hat)
+            link = _fit_tree(self, X_tree, c_hat)
 
             # Choice of the new c_hat = random step
-            tree_pred, c_hat = _draw_c_hat(link, X, y, predictions, self._rng)
+            tree_pred, c_hat = _draw_c_hat(link, X_tree, y, predictions, self._rng)
 
             # c_map calculation
-            new_cmap = _segments(link, X, self.leaves_as_segment, tree_pred)
+            new_cmap = _segments(link, X_tree, self.leaves_as_segment, tree_pred)
             stop = _changed_segments_stop(self, i, new_cmap, c_map)
             c_map = new_cmap
             pbar.update(1)
@@ -362,9 +429,12 @@ def _fit_sem(self, X, y, fallback):
                 break
 
 
-def _fit_em(self, X, y, fallback):
+def _fit_em(self, X, X_tree, y, fallback):
     """
     One chain of the EM algorithm: the segments are soft (a proportion of each observation in each segment).
+
+    :param numpy.ndarray X: the features of the regressions of the segments
+    :param numpy.ndarray X_tree: the features of the segmentation tree
     """
     n, K = self.n, self.class_num
     train = self.train_rows
@@ -373,7 +443,7 @@ def _fit_em(self, X, y, fallback):
     c_map = None
     self.criterion_iter = []
 
-    with tqdm(total=self.max_iter, leave=False, desc="Iterations") as pbar:
+    with tqdm(total=self.max_iter, leave=False, desc="Iterations", disable=_progress_disabled()) as pbar:
         for i in range(self.max_iter):
             # Getting p(y | x, c) and filling the probabilities/proportions
             predictions = np.zeros(shape=(n, K))
@@ -385,18 +455,18 @@ def _fit_em(self, X, y, fallback):
             # Getting p(c | x): each observation is repeated once per segment, weighted by its proportion. A leaf
             # of m observations therefore holds m * K samples
             link = DecisionTreeClassifier(**_tree_params(self, self.min_samples_leaf * K)).fit(
-                np.repeat(X[train], K, axis=0), np.tile(np.arange(K), len(train)),
+                np.repeat(X_tree[train], K, axis=0), np.tile(np.arange(K), len(train)),
                 sample_weight=proportion[train].ravel())
 
             # New matrix of proportions p(c | x, y) = p(c | x) * p(y | x, c) / sum_c
-            tree_pred = link.predict_proba(X)
+            tree_pred = link.predict_proba(X_tree)
             likelihood = np.maximum(np.where(y[:, np.newaxis] == 1, predictions, 1 - predictions), MIN_LIKELIHOOD)
             matrix = tree_pred * likelihood[:, link.classes_]
             proportion = np.zeros((n, K))
             proportion[:, link.classes_] = matrix / matrix.sum(axis=1, keepdims=True)
 
             # c_map calculation
-            new_cmap = _segments(link, X, self.leaves_as_segment, tree_pred)
+            new_cmap = _segments(link, X_tree, self.leaves_as_segment, tree_pred)
             stop = c_map is not None and _changed_segments_stop(self, i, new_cmap, c_map)
             c_map = new_cmap
 
@@ -411,8 +481,10 @@ def _fit_em(self, X, y, fallback):
 
 def _init_fit(self, X, y):
     """
-    Prepares the data of a fit: features as a float array, labels as a 0 / 1 array and the global regression, used
+    Prepares the data of a fit: the features of the regressions and of the tree, and the global regression, used
     for the observations of a segment without regression.
+
+    :returns: the features of the regressions, the features of the tree and the global regression
     """
     self._rng = np.random.default_rng(self.random_state)
     self.criterion_iter = []
@@ -421,25 +493,33 @@ def _init_fit(self, X, y):
     self.column_names = list(X.columns) if isinstance(X, pd.DataFrame) else None
     self.n = len(y)
     _dataset_split(self)
-    X = np.asarray(X, dtype=float)
+    if self.categorical:
+        self._tree_encoder = OneHotEncoder(handle_unknown="ignore", sparse_output=False).fit(
+            _category_frame(X[self.categorical]))
+    X_tree = _tree_features(self, X)
+    X = _model_features(self, X)
     global_model = _new_model(self)
     global_model.fit(X[self.train_rows], y[self.train_rows])
-    return X, global_model
+    return X, X_tree, global_model
 
 
-def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decrease: float = 0.0,
-        optimal_size: bool = True, tol: float = 0.005, min_samples_leaf: int = 1):
+def fit(self, X, y, solver: str = None, nb_init: int = 1, tree_depth: int = 10, min_impurity_decrease: float = 0.0,
+        optimal_size: bool = True, tol: float = 0.005, categorical=None, min_samples_leaf: int = 1):
     """
     Fits the Lrtree object.
 
     :param numpy.ndarray X:
         array_like of shape (n_samples, n_features)
         Vector to be scored, where `n_samples` is the number of samples and
-        `n_features` is the number of features
+        `n_features` is the number of features. A :class:`pandas.DataFrame` is needed if there are categorical
+        features or if the features are discretized inside the segments.
     :param numpy.ndarray y:
         Boolean (0/1) labels of the observations. Must be of
         the same length as X
         (numpy "numeric" array).
+    :param str solver:
+        sklearn's solver for the LogisticRegression of the segments (default: the one of ``logreg_kwargs``, else
+        sklearn's default 'lbfgs')
     :param int nb_init:
         Number of different random initializations
     :param int tree_depth:
@@ -450,6 +530,8 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
         Whether to use the tree parameters, or to take the optimal tree (used only with a validation set)
     :param float tol:
         Tolerance to observe an improvement and stop early
+    :param list categorical:
+        List of names of the categorical features (columns of X, which may then be of any type)
     :param int min_samples_leaf:
         Minimum number of (training) observations in a leaf of the tree
     """
@@ -458,52 +540,57 @@ def fit(self, X, y, nb_init: int = 1, tree_depth: int = 10, min_impurity_decreas
     self.min_impurity_decrease = min_impurity_decrease
     self.optimal_size = optimal_size
     self.min_samples_leaf = min_samples_leaf
+    self.solver = solver
+    self.categorical = [] if categorical is None else list(categorical)
 
-    if self.data_treatment and not isinstance(X, pd.DataFrame):
-        msg = "A numpy array cannot have mixed-type input, so using data_treatment is prohibited"
+    if (self.discretize or self.categorical) and not isinstance(X, pd.DataFrame):
+        msg = "A numpy array cannot have mixed-type input, so using categorical features or discretize is " \
+              "prohibited: provide a pandas DataFrame"
         logger.error(msg)
         raise ValueError(msg)
-    y, self.classes_ = _check_args(X, y)
+    if self.group and not self.categorical:
+        logger.info("You did not provide categorical columns names: 'group' has no effect.")
+    y, self.classes_ = _check_args(X, y, self.categorical)
 
-    X, fallback = _init_fit(self, X, y)
+    X, X_tree, fallback = _init_fit(self, X, y)
     self.global_logreg = fallback
 
     # The warnings of the optimisers of the segments' regressions are not actionable: scope the filter to the chains
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=ConvergenceWarning)
-        for _ in tqdm(range(nb_init), desc="!= initialisations"):
+        for _ in tqdm(range(nb_init), desc="!= initialisations", disable=_progress_disabled()):
             if self.algo == 'sem':
-                _fit_sem(self, X, y, fallback)
+                _fit_sem(self, X, X_tree, y, fallback)
             elif self.algo == 'em':
-                _fit_em(self, X, y, fallback)
+                _fit_em(self, X, X_tree, y, fallback)
 
     # Chains that never got past the burn-in: keep the best model they went through
     if self.best_link is None and self._fallback is not None:
         _set_best(self, *self._fallback)
 
 
-def _fit_func(class_kwargs: dict, fit_kwargs: dict):
+def _fit_func(fit_kwargs: dict, class_kwargs: dict = None):
     """
     Creates the lrtree model instance and fits it to the data
 
-    :param dict class_kwargs: arguments of :class:`lrtree.Lrtree`
     :param dict fit_kwargs: arguments of :meth:`lrtree.Lrtree.fit`, including X and y
+    :param dict class_kwargs: arguments of :class:`lrtree.Lrtree` (defaults if None)
     :return: the Lrtree model instance
     :rtype: Lrtree
     """
-    model = lrtree.Lrtree(**class_kwargs)
+    model = lrtree.Lrtree(**({} if class_kwargs is None else class_kwargs))
     model.fit(**fit_kwargs)
     return model
 
 
-def _fit_parallelized(class_kwargs: dict, fit_kwargs: dict, nb_init: int, nb_jobs: int = -1):
+def _fit_parallelized(fit_kwargs: dict, class_kwargs: dict = None, nb_init: int = 2, nb_jobs: int = -1):
     """
     A fit function which creates the model instance and fits it,
     where the random initializations are parallelized
 
+    :param dict fit_kwargs: arguments of :meth:`lrtree.Lrtree.fit`, including X and y
     :param dict class_kwargs: arguments of :class:`lrtree.Lrtree`. If it contains a ``random_state``, each
         initialization gets its own seed derived from it.
-    :param dict fit_kwargs: arguments of :meth:`lrtree.Lrtree.fit`, including X and y
     :param int nb_init:
         Number of different random initializations
     :param int nb_jobs:
@@ -512,7 +599,8 @@ def _fit_parallelized(class_kwargs: dict, fit_kwargs: dict, nb_init: int, nb_job
     :return: the Lrtree model instance with the best criterion
     :rtype: Lrtree
     """
+    class_kwargs = {} if class_kwargs is None else class_kwargs
     seeds = np.random.SeedSequence(class_kwargs.get("random_state")).generate_state(nb_init)
     models = Parallel(n_jobs=nb_jobs)(
-        delayed(_fit_func)({**class_kwargs, "random_state": int(seed)}, fit_kwargs) for seed in seeds)
+        delayed(_fit_func)(fit_kwargs, {**class_kwargs, "random_state": int(seed)}) for seed in seeds)
     return models[int(np.argmax([model.best_criterion for model in models]))]

@@ -16,6 +16,16 @@ Welcome to :mod:`lrtree`'s documentation!
 
    lrtree
 
+.. toctree::
+  :hidden:
+
+   lrtree/generate_data
+   lrtree/fit
+   lrtree/predict
+
+.. include:: ../../README.md
+   :parser: myst_parser.sphinx_
+
 Indices and tables
 ==================
 

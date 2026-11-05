@@ -39,8 +39,13 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["bandit", "coverage", "flake8", "pytest"]
-docs = ["numpydoc", "sphinx", "sphinx-rtd-theme"]
+docs = ["myst-parser", "numpydoc", "sphinx", "sphinx-rtd-theme"]
 bench = ["matplotlib"]
+scripts = ["kaggle", "matplotlib", "tabulate", "tikzplotlib"]
+
+[project.scripts]
+lrtree-consistency = "lrtree._command_line.consistency:main"
+lrtree-realdata = "lrtree._command_line.realdataopen:main"
 
 [project.urls]
 Homepage = "https://adimajo.github.io/lrtree"

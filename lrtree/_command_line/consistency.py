@@ -13,12 +13,11 @@ from pathlib import Path
 from lrtree import Lrtree
 from lrtree.fit import _fit_parallelized
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+BASE_DIR = os.getcwd()
 logger.remove()
 logger.add(tqdm.write)
-os.environ['LOGURU_LEVEL'] = 'ERROR'
 affichage = None  # Affichage de l'arbre obtenu, None, texte ou image
-test = True
+test = os.environ.get("DEBUG", "False").lower() in ('true', 't', '1')
 
 if test:
     hyperparameters_to_test = {
@@ -30,9 +29,9 @@ if test:
     n_experiments = 10
 else:
     hyperparameters_to_test = {
-        "#samples": [30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 200, 230, 260, 290, 320, 350, 400, 450, 500, 550,
-                     600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2300, 2600, 2900, 3200, 3500, 4000, 4500, 5000,
-                     5500, 6000, 7000, 8000, 9000, 10000, 12000, 14000, 16000, 18000, 20000, 30000],
+        "#samples": [30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160, 180, 200, 230, 260, 290, 320, 350, 400, 450, 500,
+                     550, 600, 700, 800, 900, 1000, 1200, 1400, 1600, 1800, 2000, 2300, 2600, 2900, 3200, 3500, 4000,
+                     4500, 5000, 5500, 6000, 7000, 8000, 9000, 10000, 12000, 14000, 16000, 18000, 20000, 30000],
         "#iterations": [10, 20, 30, 50, 75, 200],
         "#chains": range(1, 8)
     }
@@ -78,7 +77,8 @@ def one_experiment(X, y, n_init, n_iter, leaves_as_segment):
         split1[feature[0]].append(threshold[0])
         # 0, 1 et 4 sont les nodes de split
         split2[feature[1]].append(threshold[1])
-        split2[feature[4]].append(threshold[4])
+        if len(threshold) >= 5:
+            split2[feature[4]].append(threshold[4])
 
         if len(feature) == 7 and ((feature == [0, 1, -2, -2,
                                                1, -2, -2]).all() or (feature == [1, 0, -2, -2, 0, -2, -2]).all()):
@@ -93,7 +93,7 @@ def one_experiment(X, y, n_init, n_iter, leaves_as_segment):
     return model.best_criterion, forme, arbre, split1, split2, theta_model
 
 
-if __name__ == "__main__":
+def main():
     for seed in tqdm(seeds, desc="Seeds"):
         logger.info(f'Seed {seed}')
         for leaves_as_segment in tqdm([True, False], leave=False, desc="Types of segments"):
@@ -107,11 +107,12 @@ if __name__ == "__main__":
                     n_samples = hyperparameter if hyperparameter_to_test == "#samples" else 6000
                     n_iter = hyperparameter if hyperparameter_to_test == "#iterations" else 100
                     n_init = hyperparameter if hyperparameter_to_test == "#chains" else 5
-                    X, y, theta, BIC_oracle = Lrtree.generate_data(n_samples, 3, seed=seed)
+                    X, y, theta, bic_oracle = Lrtree.generate_data(n_samples, 3, seed=seed)
 
-                    criteria, formes, arbres, splits1, splits2, thetas = [], [], [], [], [], []
+                    # criteria, formes, arbres, splits1, splits2, thetas = [], [], [], [], [], []
+                    criteria, formes, arbres, splits1, splits2 = [], [], [], [], []
 
-                    for k in tqdm(range(n_experiments), leave=False, desc="Experiments"):
+                    for _ in tqdm(range(n_experiments), leave=False, desc="Experiments"):
                         criterion, forme, arbre, split1, split2, theta_model = one_experiment(X, y, n_init, n_iter,
                                                                                               leaves_as_segment)
                         criteria.append(criterion)
@@ -121,7 +122,7 @@ if __name__ == "__main__":
                         splits2.append(split2)
 
                     results[leaves_as_segment][hyperparameter_to_test].loc[hyperparameter] = [
-                        BIC_oracle,
+                        bic_oracle,
                         -np.mean(criteria), np.mean(formes), np.mean(arbres),
                         np.std(criteria), np.std(formes), np.std(arbres)]
 
@@ -160,3 +161,7 @@ if __name__ == "__main__":
                 Path(os.path.join(BASE_DIR, "tikz/")).mkdir(parents=True, exist_ok=True)
                 tikzplotlib.save(os.path.join(BASE_DIR,
                                               f"tikz/{var}_{label}_{seed}.tex"))
+
+
+if __name__ == "__main__":
+    main()
