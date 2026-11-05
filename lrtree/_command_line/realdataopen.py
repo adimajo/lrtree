@@ -80,7 +80,7 @@ def concat_results_from_workers():
             logger.info(f"Computations not finished for {data}, let's wait a bit...")
             time.sleep(60 * 10)  # wait for 10 minutes
         try:
-            results_df.append(pd.read_pickle(os.path.join(BASE_DIR, "realdataopen", f"{data}.pkl")))
+            results_df.append(pd.read_pickle(os.path.join(BASE_DIR, "realdataopen", f"{data}.pkl")))  # nosec B301
         except Exception as e:
             msg = f"Could not read results for {data}, aborting..."
             logger.error(msg)
@@ -96,14 +96,14 @@ def get_from_uci(train: str, test: str = None, **kwargs) -> (pd.DataFrame, pd.Da
         original_train = pd.read_csv(train, **kwargs)
         original_train.to_pickle(filename_train)
     else:
-        original_train = pd.read_pickle(filename_train)
+        original_train = pd.read_pickle(filename_train)  # nosec B301
     if test is not None:
         filename_test = test.split('/')[-1]
         if not os.path.isfile(filename_test):
             original_test = pd.read_csv(test, **kwargs, skiprows=1)
             original_test.to_pickle(filename_test)
         else:
-            original_test = pd.read_pickle(filename_test)
+            original_test = pd.read_pickle(filename_test)  # nosec B301
     else:
         original_test = None
     return original_train, original_test

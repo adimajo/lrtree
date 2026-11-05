@@ -93,7 +93,7 @@ if __name__ == "__main__":
     for seg in np.unique(data["grscor2"]):
         logger.info(seg)
         sub_data = data[data["grscor2"] == seg]
-        X_test = traitement_val(sub_data[used], enc, scaler, merged_cat, discret_cat)
+        X_test = processing.transform(sub_data[used])
         y_test = sub_data['cible'].to_numpy()
         y_proba = model.predict_proba(X_test)
         logger.info(f"SEM: {roc_auc_score(y_test, y_proba)}")
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     y_total_proba = []
     for base in [data_gd, data_cc, data_edm, data_instit, data_auto, data_crca, data_lcl]:
         sub_base = cacf_data(base[common])
-        X_test = traitement_val(sub_base[used], enc, scaler, merged_cat, discret_cat)
+        X_test = processing.transform(sub_base[used])
         y_test = sub_base['cible'].to_numpy()
         y_proba = model.predict_proba(X_test)
         logger.info(f"SEM: {roc_auc_score(y_test, y_proba)}")
